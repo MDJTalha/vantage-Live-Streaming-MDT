@@ -12,16 +12,10 @@ import {
 
 interface Episode extends PodcastEpisode {}
 
-interface EpisodeWithAnalytics extends Episode {
-  views?: number;
-  likes?: number;
-}
-
 export default function EpisodesPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'scheduled'>('all');
   const [sortBy, setSortBy] = useState<'date' | 'duration' | 'title'>('date');
@@ -35,14 +29,11 @@ export default function EpisodesPage() {
   }, [user]);
 
   async function loadEpisodes() {
-    setIsLoading(true);
     try {
       const userEpisodes = await podcastService.getEpisodes(user!.id);
       setEpisodes(userEpisodes);
     } catch (error) {
       console.error('Error loading episodes:', error);
-    } finally {
-      setIsLoading(false);
     }
   }
 

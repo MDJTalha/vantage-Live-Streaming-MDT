@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import podcastService from '@/services/PodcastService';
 import {
-  Mic, Video, Plus, BarChart3, FolderOpen, Clock, Users, Play, MoreVertical,
+  Mic, Video, Plus, BarChart3, FolderOpen, Clock, Play, MoreVertical,
   Copy, Edit2, Trash2, Calendar, ArrowLeft
 } from 'lucide-react';
 
@@ -282,22 +282,16 @@ function EpisodeCard({ episode }: { episode: Episode }) {
               </span>
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-600">
-              {episode.date && (
+              {episode.createdAt && (
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {episode.date}
+                  {new Date(episode.createdAt).toLocaleDateString()}
                 </span>
               )}
               {episode.duration && (
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {episode.duration}
-                </span>
-              )}
-              {episode.participants && (
-                <span className="flex items-center gap-1">
-                  <Users className="h-3 w-3" />
-                  {episode.participants} participants
+                  {Math.floor(episode.duration / 60)}:{(episode.duration % 60).toString().padStart(2, '0')}
                 </span>
               )}
             </div>

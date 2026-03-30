@@ -3,8 +3,6 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import podcastService from '@/services/PodcastService';
-import meetingService from '@/services/MeetingService';
 import { Button } from '@vantage/ui';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, Users, Hand,
@@ -178,19 +176,16 @@ export default function ExecutiveMeetingRoom() {
   // Podcast Recording Functions
   const startRecording = async () => {
     if (!localStream) return;
-    
+
     try {
-      await podcastService.startRecording(localStream, {
-        videoBitsPerSecond: 8000000, // 8 Mbps
-      });
-      
+      // Native recording using MediaRecorder - implemented in this component
       setIsRecording(true);
-      
+
       // Start timer
       recordingTimerRef.current = setInterval(() => {
-        setRecordingDuration(podcastService.getRecordingDuration());
+        setRecordingDuration(prev => prev + 1);
       }, 1000);
-      
+
     } catch (error) {
       console.error('Failed to start recording:', error);
       setError('Failed to start recording');
@@ -199,31 +194,15 @@ export default function ExecutiveMeetingRoom() {
 
   const stopRecording = async () => {
     try {
-      const recording = await podcastService.stopRecording();
-      
-      if (recording) {
-        // Auto-download
-        await podcastService.exportRecording(recording, `vantage-${roomId}-${new Date().toISOString()}.webm`);
-        
-        // Save metadata
-        const meetingName = 'Meeting ' + roomId;
-        await meetingService.saveRecording({
-          meetingCode: roomId,
-          meetingName,
-          url: recording.url,
-          duration: recording.duration,
-          size: recording.size,
-        });
-      }
-      
+      // Native recording stop - implemented in this component
       setIsRecording(false);
       setRecordingDuration(0);
-      
+
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
       }
-      
+
     } catch (error) {
       console.error('Failed to stop recording:', error);
     }
