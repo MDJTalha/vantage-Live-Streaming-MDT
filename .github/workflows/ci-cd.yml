@@ -9,9 +9,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
   # ============================================
@@ -128,49 +125,3 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-
-  # ============================================
-  # Stage 4: Deploy to Vercel (Production)
-  # ============================================
-  deploy-production:
-    name: Deploy to Vercel
-    runs-on: ubuntu-latest
-    needs: [lint-and-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    environment:
-      name: production
-      url: https://vantage-live-streaming-mdt-web.vercel.app
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.13.0'
-        cache: 'npm'
-
-    - name: Install Vercel CLI
-      run: npm install -g vercel@latest
-
-    - name: Pull Vercel environment
-      env:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      run: |
-        cd apps/web
-        vercel link --token $VERCEL_TOKEN --yes --project $VERCEL_PROJECT_ID --org $VERCEL_ORG_ID || true
-
-    - name: Deploy to Vercel
-      env:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      run: |
-        cd apps/web
-        vercel --prod --token=$VERCEL_TOKEN --yes --scope=$VERCEL_ORG_ID
