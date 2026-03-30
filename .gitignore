@@ -15,12 +15,18 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
-# Environment files
+# Environment files (NEVER commit secrets)
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+apps/**/.env
+apps/**/.env.local
+apps/**/.env.production
+packages/**/.env
+packages/**/.env.local
 
 # IDE
 .idea/
