@@ -1,0 +1,155 @@
+# Alert Rules for VANTAGE Executive Platform
+# Fortune 500 Grade Alerting
+
+groups:
+  - name: vantage-executive-alerts
+    interval: 30s
+    rules:
+      # System Health Alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+          runbook_url: "https://wiki.vantage.live/runbooks/high-cpu"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 15
+        for: 10m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Disk space critically low"
+          description: "Disk space is below 15% on {{ $labels.instance }}"
+
+      # Application Alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute"
+
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for the last 5 minutes"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is above 2 seconds"
+
+      # Meeting Quality Alerts
+      - alert: MeetingJoinTimeHigh
+        expr: avg(meeting_join_duration_seconds) > 5
+        for: 10m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Meeting join time is high"
+          description: "Average meeting join time is above 5 seconds"
+
+      - alert: VideoQualityDegraded
+        expr: avg(video_quality_score) < 4
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Video quality degraded"
+          description: "Average video quality score is below 4/5"
+
+      # Database Alerts
+      - alert: PostgreSQLConnectionsHigh
+        expr: pg_stat_activity_count > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "PostgreSQL connections high"
+          description: "PostgreSQL has more than 100 active connections"
+
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "PostgreSQL replication lag"
+          description: "PostgreSQL replication lag is above 30 seconds"
+
+      # Business Metrics Alerts
+      - alert: NoActiveMeetings
+        expr: active_meetings_count == 0
+        for: 1h
+        labels:
+          severity: info
+          team: business
+        annotations:
+          summary: "No active meetings for 1 hour"
+          description: "There have been no active meetings for the past hour"
+
+      - alert: MeetingFailureRate
+        expr: sum(rate(meeting_failures_total[1h])) / sum(rate(meeting_starts_total[1h])) > 0.02
+        for: 30m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "Meeting failure rate high"
+          description: "More than 2% of meetings are failing to start"
+
+  - name: vantage-executive-recording-alerts
+    interval: 1m
+    rules:
+      - alert: RecordingStorageLow
+        expr: recording_storage_used_bytes / recording_storage_quota_bytes > 0.9
+        for: 30m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Recording storage nearly full"
+          description: "Recording storage is above 90% capacity"
+
+      - alert: RecordingFailed
+        expr: rate(recordings_failed_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Recording failures detected"
+          description: "Meeting recordings are failing to save"

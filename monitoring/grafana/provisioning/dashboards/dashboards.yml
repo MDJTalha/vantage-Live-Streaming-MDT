@@ -1,0 +1,16 @@
+# Grafana Dashboard Provisioning
+# Automatically load dashboards
+
+apiVersion: 1
+
+providers:
+  - name: 'VANTAGE Dashboards'
+    orgId: 1
+    folder: 'VANTAGE'
+    folderUid: 'vantage'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

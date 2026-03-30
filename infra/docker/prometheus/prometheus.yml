@@ -1,0 +1,45 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Server
+  - job_name: 'api'
+    static_configs:
+      - targets: ['api:4000']
+    metrics_path: '/metrics'
+
+  # Web Frontend
+  - job_name: 'web'
+    static_configs:
+      - targets: ['web:3000']
+
+  # Media Server
+  - job_name: 'media-server'
+    static_configs:
+      - targets: ['media-server:443']
+
+  # AI Services
+  - job_name: 'ai-services'
+    static_configs:
+      - targets: ['ai-services:5000']
+
+  # Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']

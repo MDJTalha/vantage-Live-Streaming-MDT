@@ -1,0 +1,168 @@
+# Prometheus Alert Rules
+# VANTAGE Platform Alerting
+
+groups:
+  # ============================================
+  # API Service Alerts
+  # ============================================
+  - name: vantage-api
+    rules:
+      - alert: APIHighErrorRate
+        expr: rate(http_requests_total{service="vantage-api",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value }}% (threshold: 5%)"
+
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service="vantage-api"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency"
+          description: "95th percentile latency is {{ $value }}s (threshold: 1s)"
+
+      - alert: APIDown
+        expr: up{service="vantage-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API is down"
+          description: "VANTAGE API has been down for more than 1 minute"
+
+  # ============================================
+  # Database Alerts
+  # ============================================
+  - name: database
+    rules:
+      - alert: PostgresDown
+        expr: up{service="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database has been down for more than 1 minute"
+
+      - alert: PostgresHighConnections
+        expr: pg_stat_activity_count > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High PostgreSQL connections"
+          description: "PostgreSQL has {{ $value }} active connections"
+
+      - alert: PostgresSlowQueries
+        expr: rate(pg_stat_statements_seconds_total[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow PostgreSQL queries"
+          description: "Average query time is {{ $value }}s"
+
+  # ============================================
+  # Redis Alerts
+  # ============================================
+  - name: redis
+    rules:
+      - alert: RedisDown
+        expr: up{service="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache has been down for more than 1 minute"
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+  # ============================================
+  # Media Server Alerts
+  # ============================================
+  - name: media-server
+    rules:
+      - alert: MediaServerDown
+        expr: up{service="vantage-media-server"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Media Server is down"
+          description: "VANTAGE Media Server has been down for more than 2 minutes"
+
+      - alert: HighWebRTCLatency
+        expr: webrtc_latency_seconds > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WebRTC latency"
+          description: "WebRTC latency is {{ $value }}s (threshold: 300ms)"
+
+  # ============================================
+  # System Alerts
+  # ============================================
+  - name: system
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value }}% available on {{ $labels.instance }}"
+
+  # ============================================
+  # Security Alerts
+  # ============================================
+  - name: security
+    rules:
+      - alert: HighFailedLogins
+        expr: rate(login_attempts_total{success="false"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High failed login rate"
+          description: "{{ $value }} failed logins per second - possible brute force attack"
+
+      - alert: HighRateLimitHits
+        expr: rate(rate_limit_exceeded_total[5m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limit hits"
+          description: "{{ $value }} rate limit violations per second"

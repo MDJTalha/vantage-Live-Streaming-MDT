@@ -1,0 +1,6 @@
+services:
+  livestreaming:
+    image: livestreaming
+    build:
+      context: .
+      dockerfile: ./Dockerfile

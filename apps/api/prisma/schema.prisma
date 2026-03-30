@@ -1,0 +1,298 @@
+// Prisma Schema for VANTAGE Executive Platform
+// Enterprise-grade database schema for Fortune 500 CEOs & Board of Directors
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER MANAGEMENT ====================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  role          Role      @default(PARTICIPANT)
+  avatarUrl     String?
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // 🔐 MFA Fields
+  mfaSecret      String?
+  mfaEnabled     Boolean @default(false)
+  mfaBackupCodes Json? // Array of backup codes
+
+  // 🔐 SAML Fields
+  samlNameID       String?
+  samlNameIDFormat String?
+  samlProvider     String? // okta, azure-ad, onelogin, etc.
+
+  // Relations
+  meetingsHosted Meeting[]       @relation("HostedMeetings")
+  participations Participation[]
+  sessions       Session[]
+  notifications  Notification[]
+  recordings     Recording[]
+  messages       Message[]
+
+  @@index([email])
+  @@index([role])
+  @@index([id])
+}
+
+enum Role {
+  ADMIN
+  HOST
+  PARTICIPANT
+  GUEST
+}
+
+// ==================== SESSION MANAGEMENT ====================
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  tokenHash    String   @unique
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  provider     String? // local, saml, oauth
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+// ==================== MEETINGS ====================
+
+model Meeting {
+  id              String        @id @default(uuid())
+  code            String        @unique
+  name            String
+  description     String?
+  hostId          String
+  status          MeetingStatus @default(SCHEDULED)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  scheduledAt     DateTime?
+  duration        Int? // in minutes
+  maxParticipants Int           @default(100)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Settings
+  allowChat           Boolean @default(true)
+  allowScreenShare    Boolean @default(true)
+  allowRecording      Boolean @default(true)
+  requirePassword     Boolean @default(false)
+  passwordHash        String?
+  enableWaitingRoom   Boolean @default(false)
+  enableBreakoutRooms Boolean @default(false)
+
+  // Relations
+  host           User              @relation("HostedMeetings", fields: [hostId], references: [id])
+  participations Participation[]
+  messages       Message[]
+  recordings     Recording[]
+  analytics      MeetingAnalytics? @relation("MeetingToAnalytics")
+
+  @@index([hostId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([code])
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+// ==================== PARTICIPATION ====================
+
+model Participation {
+  id        String              @id @default(uuid())
+  meetingId String
+  userId    String?
+  guestName String?
+  role      ParticipationRole   @default(PARTICIPANT)
+  joinedAt  DateTime            @default(now())
+  leftAt    DateTime?
+  status    ParticipationStatus @default(JOINED)
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([meetingId])
+  @@index([userId])
+  @@index([joinedAt])
+}
+
+enum ParticipationRole {
+  HOST
+  COHOST
+  PARTICIPANT
+  PRESENTER
+}
+
+enum ParticipationStatus {
+  WAITING
+  JOINED
+  LEFT
+  DENIED
+}
+
+// ==================== MESSAGES ====================
+
+model Message {
+  id        String      @id @default(uuid())
+  meetingId String
+  userId    String?
+  guestName String?
+  content   String
+  type      MessageType @default(TEXT)
+  createdAt DateTime    @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([meetingId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+  RESCHEDULE
+  NOT_JOINING
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  meetingId String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  MEETING_STARTING
+  PARTICIPANT_JOINED
+  PARTICIPANT_LEFT
+  RECORDING_READY
+  MESSAGE_RECEIVED
+  MEETING_SCHEDULED
+  MEETING_CANCELLED
+}
+
+// ==================== RECORDINGS ====================
+
+model Recording {
+  id           String          @id @default(uuid())
+  meetingId    String
+  userId       String
+  url          String
+  thumbnailUrl String?
+  duration     Int // in seconds
+  size         Int // in bytes
+  status       RecordingStatus @default(PROCESSING)
+  createdAt    DateTime        @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([meetingId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum RecordingStatus {
+  PROCESSING
+  READY
+  FAILED
+  DELETED
+}
+
+// ==================== ANALYTICS ====================
+
+model MeetingAnalytics {
+  id               String   @id @default(uuid())
+  meetingId        String   @unique
+  totalDuration    Int // in seconds
+  peakParticipants Int
+  averageQuality   Float? // 0-5 scale
+  chatMessages     Int
+  screenShares     Int
+  recordings       Int
+  createdAt        DateTime @default(now())
+
+  meeting Meeting @relation("MeetingToAnalytics", fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([createdAt])
+}
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  resource   String?
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([resource, resourceId])
+}
+
+// ==================== ORGANIZATION ====================
+
+model Organization {
+  id               String           @id @default(uuid())
+  name             String
+  subscriptionTier SubscriptionTier @default(FREE)
+  maxParticipants  Int              @default(5)
+  maxRooms         Int              @default(1)
+  storageQuota     BigInt           @default(0) // in bytes
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([subscriptionTier])
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}

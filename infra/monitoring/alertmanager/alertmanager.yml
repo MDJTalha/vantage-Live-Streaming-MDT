@@ -1,0 +1,65 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_HOST:-smtp.gmail.com:587}'
+  smtp_from: '${SMTP_FROM:-alertmanager@vantage.live}'
+  smtp_auth_username: '${SMTP_USER:-}'
+  smtp_auth_password: '${SMTP_PASS:-}'
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+
+receivers:
+  - name: 'default-receiver'
+    email_configs:
+      - to: '${ALERT_EMAIL:-admin@vantage.live}'
+        send_resolved: true
+
+  - name: 'critical-receiver'
+    email_configs:
+      - to: '${ALERT_EMAIL:-admin@vantage.live}'
+        send_resolved: true
+        html: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; }
+              .alert { color: #d9534f; }
+              .details { margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <h2 class="alert">🚨 Critical Alert: {{ .GroupLabels.alertname }}</h2>
+            <div class="details">
+              {{ range .Alerts }}
+              <p><strong>Status:</strong> {{ .Status }}</p>
+              <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+              <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+              <p><strong>Started:</strong> {{ .StartsAt }}</p>
+              {{ end }}
+            </div>
+          </body>
+          </html>
+
+  - name: 'warning-receiver'
+    email_configs:
+      - to: '${ALERT_EMAIL:-admin@vantage.live}'
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']

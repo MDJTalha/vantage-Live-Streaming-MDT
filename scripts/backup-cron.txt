@@ -1,0 +1,11 @@
+# VANTAGE Executive Platform - Automated Backup Cron Job
+# Install with: crontab backup-cron.txt
+
+# Daily backup at 2:00 AM
+0 2 * * * /bin/bash /path/to/vantage/scripts/backup.sh >> /var/log/vantage/backup.log 2>&1
+
+# Weekly full backup on Sunday at 3:00 AM
+0 3 * * 0 /bin/bash /path/to/vantage/scripts/backup.sh --full >> /var/log/vantage/backup.log 2>&1
+
+# Monthly backup verification on 1st at 4:00 AM
+0 4 1 * * /bin/bash /path/to/vantage/scripts/verify-backup.sh >> /var/log/vantage/backup.log 2>&1

@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: vantage-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vantage}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-vantage}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - vantage-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vantage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: vantage-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dev_redis_password_change_me}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - vantage-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Coturn TURN/STUN Server (WebRTC)
+  coturn:
+    image: coturn/coturn:latest
+    container_name: vantage-coturn
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n
+      --log-file=stdout
+      --listening-port=3478
+      --min-port=10000
+      --max-port=60000
+      --realm=vantage
+      --user=vantage_user:vantage_turn_password
+      --lt-cred-mech
+      --no-multicast-peers
+      --no-cli
+    volumes:
+      - ./infra/docker/coturn/turnserver.conf:/etc/turnserver.conf:ro
+    depends_on:
+      - redis
+    networks:
+      - vantage-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  vantage-network:
+    driver: bridge

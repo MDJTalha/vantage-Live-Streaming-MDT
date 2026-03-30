@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Media Server (Mediasoup SFU)
+  media-server:
+    build:
+      context: ../../apps/media-server
+      dockerfile: Dockerfile
+    container_name: vantage-media-server
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - MEDIA_SERVER_HOST=0.0.0.0
+      - MEDIA_SERVER_PORT=443
+      - MEDIA_SERVER_MIN_PORT=10000
+      - MEDIA_SERVER_MAX_PORT=60000
+      - REDIS_URL=redis://redis:6379
+      - TURN_SERVER_URL=turn:coturn:3478
+      - TURN_SERVER_USERNAME=vantage_user
+      - TURN_SERVER_PASSWORD=vantage_turn_password
+    volumes:
+      - ../../apps/media-server/src:/app/src
+      - ../../apps/media-server/package.json:/app/package.json
+      - ../../packages:/app/packages
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    depends_on:
+      - redis
+      - coturn
+    labels:
+      - "com.vantage.service=media-server"
+
+  # Redis (for Mediasoup coordination)
+  redis:
+    image: redis:7-alpine
+    container_name: vantage-redis-media
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_media_data:/data
+    networks:
+      - vantage-network
+
+  # Coturn TURN/STUN Server
+  coturn:
+    image: coturn/coturn:latest
+    container_name: vantage-coturn
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n
+      --log-file=stdout
+      --listening-port=3478
+      --tls-listening-port=5349
+      --min-port=10000
+      --max-port=60000
+      --realm=vantage.live
+      --user=vantage_user:vantage_turn_password
+      --lt-cred-mech
+      --no-multicast-peers
+      --no-cli
+      --verbose
+      --fingerprint
+      --no-tcp-relay
+      --no-udp-relay
+      --cli-password=vantage_cli_password
+    volumes:
+      - ../../infra/docker/coturn/turnserver.conf:/etc/turnserver.conf:ro
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - redis
+
+volumes:
+  redis_media_data:
+    driver: local
+
+networks:
+  vantage-network:
+    driver: bridge

@@ -1,0 +1,238 @@
+import { Request, Response, NextFunction } from 'express';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export interface FeatureCheckOptions {
+  feature: string;
+  organizationId?: string;
+}
+
+// Define features available per tier
+const FEATURE_MATRIX = {
+  RECORDING: ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'],
+  TRANSCRIPTION: ['PROFESSIONAL', 'ENTERPRISE'],
+  ANALYTICS: ['PROFESSIONAL', 'ENTERPRISE'],
+  API_ACCESS: ['PROFESSIONAL', 'ENTERPRISE'],
+  WHITE_LABEL: ['ENTERPRISE'],
+  CUSTOM_DOMAIN: ['ENTERPRISE'],
+  ADVANCED_SECURITY: ['PROFESSIONAL', 'ENTERPRISE'],
+  PRIORITY_SUPPORT: ['ENTERPRISE'],
+  UNLIMITED_STORAGE: ['ENTERPRISE'],
+  BREAKOUT_ROOMS: ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'],
+  LIVE_POLLING: ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'],
+  SCREEN_SHARE: ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'],
+  RECORDING_TRANSCRIPTION: ['PROFESSIONAL', 'ENTERPRISE'],
+};
+
+// Define constraint limits per tier
+const CONSTRAINT_LIMITS = {
+  FREE: {
+    maxParticipants: 5,
+    maxRooms: 1,
+    maxRecordingMinutes: 0,
+    maxStorageGb: 1,
+    maxApiKeys: 0,
+  },
+  STARTER: {
+    maxParticipants: 50,
+    maxRooms: 10,
+    maxRecordingMinutes: 500,
+    maxStorageGb: 100,
+    maxApiKeys: 1,
+  },
+  PROFESSIONAL: {
+    maxParticipants: 500,
+    maxRooms: 100,
+    maxRecordingMinutes: 5000,
+    maxStorageGb: 1000,
+    maxApiKeys: 10,
+  },
+  ENTERPRISE: {
+    maxParticipants: Infinity,
+    maxRooms: Infinity,
+    maxRecordingMinutes: Infinity,
+    maxStorageGb: Infinity,
+    maxApiKeys: Infinity,
+  },
+};
+
+/**
+ * Get organization tier - cached for request
+ */
+export async function getOrganizationTier(organizationId: string): Promise<string> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { subscriptionTier: true },
+  });
+
+  return org?.subscriptionTier || 'FREE';
+}
+
+/**
+ * Check if organization has access to feature
+ */
+export async function hasFeatureAccess(organizationId: string, feature: keyof typeof FEATURE_MATRIX): Promise<boolean> {
+  const tier = await getOrganizationTier(organizationId);
+  return FEATURE_MATRIX[feature].includes(tier);
+}
+
+/**
+ * Middle ware to check feature access
+ */
+export function requireFeature(feature: keyof typeof FEATURE_MATRIX) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const organizationId = (req as any).organization?.id || (req as any).user?.organizationId;
+
+      if (!organizationId) {
+        return res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Organization not found in request context',
+          },
+        });
+      }
+
+      const hasAccess = await hasFeatureAccess(organizationId, feature);
+
+      if (!hasAccess) {
+        const tier = await getOrganizationTier(organizationId);
+        return res.status(403).json({
+          error: {
+            code: 'FEATURE_NOT_AVAILABLE',
+            message: `Feature '${feature}' is not available in ${tier} tier`,
+            availableInTiers: FEATURE_MATRIX[feature],
+            currentTier: tier,
+            upgradeUrl: '/account/upgrade',
+          },
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error('Feature gate check failed:', error);
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to check feature access',
+        },
+      });
+    }
+  };
+}
+
+/**
+ * Check constraint limits
+ */
+export async function checkConstraint(
+  organizationId: string,
+  constraint: keyof typeof CONSTRAINT_LIMITS.FREE,
+  currentUsage: number
+): Promise<boolean> {
+  const tier = await getOrganizationTier(organizationId);
+  const limit = CONSTRAINT_LIMITS[tier as keyof typeof CONSTRAINT_LIMITS][constraint];
+  return currentUsage < limit;
+}
+
+/**
+ * Get constraint limit for tier
+ */
+export async function getConstraintLimit(
+  organizationId: string,
+  constraint: keyof typeof CONSTRAINT_LIMITS.FREE
+): Promise<number> {
+  const tier = await getOrganizationTier(organizationId);
+  return CONSTRAINT_LIMITS[tier as keyof typeof CONSTRAINT_LIMITS][constraint];
+}
+
+/**
+ * Enforce constraint - middleware for common constraints
+ */
+export function enforceConstraint(constraint: keyof typeof CONSTRAINT_LIMITS.FREE) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const organizationId = (req as any).organization?.id || (req as any).user?.organizationId;
+
+      if (!organizationId) {
+        return res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Organization not found in request context',
+          },
+        });
+      }
+
+      // Get current usage based on constraint type
+      let currentUsage = 0;
+
+      if (constraint === 'maxParticipants') {
+        const roomId = req.params.roomId;
+        if (roomId) {
+          currentUsage = await prisma.roomParticipant.count({
+            where: {
+              roomId,
+              leftAt: null, // Only count active participants
+            },
+          });
+        }
+      } else if (constraint === 'maxRooms') {
+        currentUsage = await prisma.room.count({
+          where: { organizationId },
+        });
+      }
+
+      const allowed = await checkConstraint(organizationId, constraint, currentUsage);
+
+      if (!allowed) {
+        const tier = await getOrganizationTier(organizationId);
+        const limit = CONSTRAINT_LIMITS[tier as keyof typeof CONSTRAINT_LIMITS][constraint];
+
+        return res.status(402).json({
+          error: {
+            code: 'LIMIT_EXCEEDED',
+            message: `${constraint} limit exceeded for ${tier} tier`,
+            limit,
+            currentUsage,
+            upgradeUrl: '/account/upgrade',
+          },
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error('Constraint enforcement failed:', error);
+      return res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to check constraint',
+        },
+      });
+    }
+  };
+}
+
+/**
+ * Get tier details
+ */
+export function getTierDetails(tier: string) {
+  return {
+    tier,
+    features: Object.entries(FEATURE_MATRIX)
+      .filter(([_, tiers]) => tiers.includes(tier))
+      .map(([feature]) => feature),
+    constraints: CONSTRAINT_LIMITS[tier as keyof typeof CONSTRAINT_LIMITS] || CONSTRAINT_LIMITS.FREE,
+  };
+}
+
+export default {
+  FEATURE_MATRIX,
+  CONSTRAINT_LIMITS,
+  getOrganizationTier,
+  hasFeatureAccess,
+  requireFeature,
+  checkConstraint,
+  getConstraintLimit,
+  enforceConstraint,
+  getTierDetails,
+};

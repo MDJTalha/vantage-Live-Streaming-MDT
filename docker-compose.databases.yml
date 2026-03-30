@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: vantage-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vantage
+      POSTGRES_PASSWORD: vantage_password
+      POSTGRES_DB: vantage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vantage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vantage-network
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: vantage-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vantage-network
+
+volumes:
+  postgres_data:
+    name: vantage-postgres-data
+  redis_data:
+    name: vantage-redis-data
+
+networks:
+  vantage-network:
+    driver: bridge
+    name: vantage-network

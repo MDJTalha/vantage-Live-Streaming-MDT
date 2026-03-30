@@ -1,0 +1,98 @@
+groups:
+  - name: vantage-alerts
+    interval: 30s
+    rules:
+      # API Service Down
+      - alert: APIServiceDown
+        expr: up{job="vantage-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Vantage API service is down"
+          description: "The API service has been down for more than 2 minutes."
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for the last 5 minutes."
+
+      # High API Latency
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile response time is above 1 second."
+
+      # Database Connection Issues
+      - alert: DatabaseConnectionPoolExhausted
+        expr: rate(db_query_duration_seconds_count[1m]) < 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool may be exhausted"
+          description: "Very few database queries are being executed."
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: process_memory_bytes{type="rss"} > 1073741824
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Process RSS memory is above 1GB."
+
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: process_cpu_usage > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "Process CPU usage is above 80%."
+
+      # WebSocket Connections Drop
+      - alert: WebSocketConnectionsDrop
+        expr: active_connections < 1
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No active WebSocket connections"
+          description: "There are no active WebSocket connections for 10 minutes."
+
+      # Redis Connection Issues
+      - alert: RedisConnectionIssues
+        expr: rate(redis_operations_total[5m]) < 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis connection may have issues"
+          description: "Very few Redis operations are being executed."
+
+  - name: recording-rules
+    interval: 15s
+    rules:
+      # Pre-compute error rate
+      - record: job:error_rate:rate5m
+        expr: sum(rate(errors_total[5m])) by (job)
+
+      # Pre-compute request rate
+      - record: job:request_rate:rate5m
+        expr: sum(rate(api_requests_total[5m])) by (job)
+
+      # Pre-compute latency percentiles
+      - record: job:http_latency_p95:rate5m
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job))

@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "composite": true
+  },
+  "references": [
+    { "path": "./config/tsconfig.json" },
+    { "path": "./types/tsconfig.json" },
+    { "path": "./ui/tsconfig.json" },
+    { "path": "./utils/tsconfig.json" }
+  ]
+}

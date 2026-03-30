@@ -1,0 +1,111 @@
+# Prometheus Configuration
+# VANTAGE Platform Monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'vantage-platform'
+    environment: '${ENVIRONMENT:-development}'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load rules files
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # ============================================
+  # Prometheus Self-Monitoring
+  # ============================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # ============================================
+  # VANTAGE API Metrics
+  # ============================================
+  - job_name: 'vantage-api'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          service: 'vantage-api'
+          environment: '${ENVIRONMENT:-development}'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # ============================================
+  # VANTAGE Media Server
+  # ============================================
+  - job_name: 'vantage-media-server'
+    static_configs:
+      - targets: ['host.docker.internal:443']
+        labels:
+          service: 'vantage-media-server'
+    metrics_path: '/stats'
+    scrape_interval: 30s
+
+  # ============================================
+  # Node Exporter - System Metrics
+  # ============================================
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+
+  # ============================================
+  # Redis Metrics
+  # ============================================
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+
+  # ============================================
+  # PostgreSQL Metrics
+  # ============================================
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+
+  # ============================================
+  # Blackbox Exporter - Uptime Monitoring
+  # ============================================
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://host.docker.internal:4000/health
+          - http://host.docker.internal:3000
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ============================================
+  # WebSocket Connection Monitoring
+  # ============================================
+  - job_name: 'websocket-monitor'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          service: 'websocket'
+    metrics_path: '/metrics/websocket'
+    scrape_interval: 30s

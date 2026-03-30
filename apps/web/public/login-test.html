@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VANTAGE Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #0a0e1a;
+            color: white;
+        }
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #334155;
+            border-radius: 5px;
+            background: #0f172a;
+            color: white;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .error {
+            color: #ef4444;
+            padding: 10px;
+            background: #dc262620;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #22c55e;
+            padding: 10px;
+            background: #16a34a20;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .credentials {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 VANTAGE Login Test</h1>
+    
+    <div class="card">
+        <h3>Demo Credentials</h3>
+        <div class="credentials">
+            <strong>Admin:</strong><br>
+            Email: admin@vantage.live<br>
+            Password: @admin@123#<br><br>
+            
+            <strong>Host:</strong><br>
+            Email: host@vantage.live<br>
+            Password: @host@123#<br><br>
+            
+            <strong>User:</strong><br>
+            Email: user@vantage.live<br>
+            Password: @user@123#
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Login Form</h3>
+        <div id="message"></div>
+        <form id="loginForm">
+            <input type="email" id="email" placeholder="Email" value="admin@vantage.live" required>
+            <input type="password" id="password" placeholder="Password" value="@admin@123#" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Current Auth Status</h3>
+        <div id="status">Checking...</div>
+        <button onclick="logout()" style="margin-top: 10px; background: #ef4444;">Logout</button>
+    </div>
+
+    <script>
+        // Check current auth status
+        function checkAuth() {
+            const token = localStorage.getItem('accessToken');
+            const demoUser = localStorage.getItem('demoUser');
+            
+            if (token || demoUser) {
+                const user = demoUser ? JSON.parse(demoUser) : 'Unknown';
+                document.getElementById('status').innerHTML = `
+                    <div class="success">
+                        ✅ Logged in<br>
+                        User: ${JSON.stringify(user, null, 2)}
+                    </div>
+                `;
+            } else {
+                document.getElementById('status').innerHTML = '<div class="error">❌ Not logged in</div>';
+            }
+        }
+
+        // Login handler
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const messageDiv = document.getElementById('message');
+            
+            messageDiv.innerHTML = '<div class="success">⏳ Processing...</div>';
+            
+            try {
+                // Demo mode login (works without API)
+                const demoUsers = {
+                    'admin@vantage.live': {
+                        password: '@admin@123#',
+                        user: { id: '1', email: 'admin@vantage.live', name: 'VANTAGE Admin', role: 'ADMIN' }
+                    },
+                    'host@vantage.live': {
+                        password: '@host@123#',
+                        user: { id: '2', email: 'host@vantage.live', name: 'Demo Host', role: 'HOST' }
+                    },
+                    'user@vantage.live': {
+                        password: '@user@123#',
+                        user: { id: '3', email: 'user@vantage.live', name: 'Demo User', role: 'PARTICIPANT' }
+                    }
+                };
+                
+                await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+                
+                const demoUser = demoUsers[email.toLowerCase()];
+                
+                if (demoUser && demoUser.password === password) {
+                    // Login successful
+                    localStorage.setItem('accessToken', 'demo-token-' + Date.now());
+                    localStorage.setItem('demoUser', JSON.stringify(demoUser.user));
+                    
+                    messageDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Login successful!<br>
+                            Redirecting to dashboard...
+                        </div>
+                    `;
+                    
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 1000);
+                } else {
+                    // Create demo account with any email
+                    const newUser = {
+                        id: 'user-' + Date.now(),
+                        email: email,
+                        name: email.split('@')[0],
+                        role: 'USER'
+                    };
+                    
+                    localStorage.setItem('accessToken', 'demo-token-' + Date.now());
+                    localStorage.setItem('demoUser', JSON.stringify(newUser));
+                    
+                    messageDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Account created!<br>
+                            Redirecting to dashboard...
+                        </div>
+                    `;
+                    
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 1000);
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `
+                    <div class="error">
+                        ❌ Login failed: ${error.message}
+                    </div>
+                `;
+            }
+            
+            checkAuth();
+        });
+
+        // Logout handler
+        function logout() {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('demoUser');
+            checkAuth();
+            document.getElementById('message').innerHTML = '<div class="success">✅ Logged out successfully</div>';
+        }
+
+        // Check auth on load
+        checkAuth();
+    </script>
+</body>
+</html>

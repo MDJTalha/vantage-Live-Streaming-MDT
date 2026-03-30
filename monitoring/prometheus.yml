@@ -1,0 +1,78 @@
+# Prometheus Configuration for VANTAGE Executive Platform
+# Zero-cost monitoring for Fortune 500 grade infrastructure
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'vantage-production'
+    environment: 'executive'
+
+# Scrape configurations
+scrape_configs:
+  # Node Exporter - System metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Next.js Frontend
+  - job_name: 'vantage-web'
+    static_configs:
+      - targets: ['web:3000']
+    metrics_path: /api/metrics
+    scrape_interval: 30s
+
+  # Node.js API
+  - job_name: 'vantage-api'
+    static_configs:
+      - targets: ['api:4000']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # PostgreSQL Database
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # Media Server (Mediasoup)
+  - job_name: 'mediasoup'
+    static_configs:
+      - targets: ['media-server:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Blackbox Exporter - Uptime monitoring
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://web:3000
+          - http://api:4000/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+# Alerting rules
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']

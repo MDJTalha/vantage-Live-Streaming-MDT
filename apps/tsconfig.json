@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "composite": true
+  },
+  "references": [
+    { "path": "./api/tsconfig.json" },
+    { "path": "./ai-services/tsconfig.json" },
+    { "path": "./media-server/tsconfig.json" }
+  ]
+}

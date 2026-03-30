@@ -1,0 +1,409 @@
+// Stripe stub - to be implemented when Stripe is added to dependencies
+// For now, billing is in read-only mode for production testing
+import { prisma } from '../db';
+// import { generateInvoiceNumber } from '../utils/invoice';
+
+export class BillingService {
+  private stripe: any = null;
+
+  constructor() {
+    // Stripe integration deferred - use in-app billing for MVP
+    console.info('BillingService initialized (Stripe integration deferred)');
+  }
+
+  private throwNotImplemented(feature: string): never {
+    throw new Error(`${feature} - Billing feature not yet implemented. Install Stripe dependency to enable.`);
+  }
+
+  /**
+   * Create a new subscription for an organization
+   */
+  async createSubscription(organizationId: string, tier: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE') {
+    const priceMap = {
+      STARTER: process.env.STRIPE_PRICE_STARTER!,
+      PROFESSIONAL: process.env.STRIPE_PRICE_PROFESSIONAL!,
+      ENTERPRISE: process.env.STRIPE_PRICE_ENTERPRISE!,
+    };
+
+    const priceId = priceMap[tier];
+    if (!priceId) {
+      throw new Error(`No price configured for tier: ${tier}`);
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, billingEmail: true },
+    });
+
+    if (!org) {
+      throw new Error('Organization not found');
+    }
+
+    // Create Stripe customer
+    const customer = await this.stripe.customers.create({
+      email: org.billingEmail,
+      name: org.name,
+      metadata: { organizationId },
+    });
+
+    // Create subscription
+    const subscription = await this.stripe.subscriptions.create({
+      customer: customer.id,
+      items: [{ price: priceId }],
+      automatic_tax: { enabled: true },
+      payment_settings: {
+        payment_method_types: ['card'],
+        save_default_payment_method: 'on_subscription',
+      },
+    });
+
+    // Update organization with subscription details
+    const updatedOrg = await prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        subscriptionTier: tier,
+        subscription: {
+          create: {
+            tier,
+            status: 'ACTIVE',
+            stripeCustomerId: customer.id,
+            stripePriceId: priceId,
+            stripeSubscriptionId: subscription.id,
+            currentPeriodStart: new Date(subscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          },
+        },
+      },
+      include: { subscription: true },
+    });
+
+    return {
+      subscription: updatedOrg.subscription,
+      stripeCustomerId: customer.id,
+      setupRequired: subscription.status === 'incomplete',
+    };
+  }
+
+  /**
+   * Upgrade subscription to a higher tier
+   */
+  async upgradeSubscription(organizationId: string, newTier: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE') {
+    const subscription = await prisma.subscription.findUnique({
+      where: { organizationId },
+    });
+
+    if (!subscription?.stripeSubscriptionId) {
+      throw new Error('No active subscription found');
+    }
+
+    const priceMap = {
+      STARTER: process.env.STRIPE_PRICE_STARTER!,
+      PROFESSIONAL: process.env.STRIPE_PRICE_PROFESSIONAL!,
+      ENTERPRISE: process.env.STRIPE_PRICE_ENTERPRISE!,
+    };
+
+    const newPriceId = priceMap[newTier];
+    if (!newPriceId) {
+      throw new Error(`No price configured for tier: ${newTier}`);
+    }
+
+    // Update Stripe subscription
+    await this.stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+      items: [
+        {
+          id: (await this.stripe.subscriptions.retrieve(subscription.stripeSubscriptionId)).items.data[0].id,
+          price: newPriceId,
+        },
+      ],
+      proration_behavior: 'create_prorations',
+    });
+
+    // Update database
+    const result = await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        tier: newTier,
+        stripePriceId: newPriceId,
+      },
+    });
+
+    // Update organization tier
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { subscriptionTier: newTier },
+    });
+
+    return result;
+  }
+
+  /**
+   * Cancel subscription
+   */
+  async cancelSubscription(organizationId: string) {
+    const subscription = await prisma.subscription.findUnique({
+      where: { organizationId },
+    });
+
+    if (!subscription?.stripeSubscriptionId) {
+      throw new Error('No active subscription found');
+    }
+
+    // Cancel immediately
+    await this.stripe.subscriptions.del(subscription.stripeSubscriptionId);
+
+    // Update database
+    return await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: 'CANCELED',
+      },
+    });
+  }
+
+  /**
+   * Handle Stripe webhook events
+   */
+  async handleWebhookEvent(event: Stripe.Event) {
+    switch (event.type) {
+      case 'customer.subscription.updated':
+        return this.handleSubscriptionUpdate(event.data.object as Stripe.Subscription);
+
+      case 'customer.subscription.deleted':
+        return this.handleSubscriptionCancel(event.data.object as Stripe.Subscription);
+
+      case 'invoice.payment_succeeded':
+        return this.handleInvoicePaid(event.data.object as Stripe.Invoice);
+
+      case 'invoice.payment_failed':
+        return this.handleInvoiceFailed(event.data.object as Stripe.Invoice);
+
+      case 'invoice.upcoming':
+        return this.handleUpcomingInvoice(event.data.object as Stripe.Invoice);
+
+      default:
+        console.log(`Unhandled webhook event type: ${event.type}`);
+    }
+  }
+
+  /**
+   * Handle subscription update
+   */
+  private async handleSubscriptionUpdate(stripeSubscription: Stripe.Subscription) {
+    const subscription = await prisma.subscription.findUnique({
+      where: { stripeSubscriptionId: stripeSubscription.id },
+    });
+
+    if (!subscription) return;
+
+    const statusMap: Record<string, any> = {
+      active: 'ACTIVE',
+      past_due: 'PAST_DUE',
+      canceled: 'CANCELED',
+      unpaid: 'SUSPENDED',
+    };
+
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: statusMap[stripeSubscription.status] || 'ACTIVE',
+        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+      },
+    });
+  }
+
+  /**
+   * Handle subscription cancellation
+   */
+  private async handleSubscriptionCancel(stripeSubscription: Stripe.Subscription) {
+    const subscription = await prisma.subscription.findUnique({
+      where: { stripeSubscriptionId: stripeSubscription.id },
+    });
+
+    if (!subscription) return;
+
+    // Update subscription status
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: { status: 'CANCELED' },
+    });
+
+    // Downgrade organization to free tier
+    await prisma.organization.update({
+      where: { id: subscription.organizationId },
+      data: { subscriptionTier: 'FREE' },
+    });
+  }
+
+  /**
+   * Handle invoice paid
+   */
+  private async handleInvoicePaid(stripeInvoice: Stripe.Invoice) {
+    if (!stripeInvoice.customer) return;
+
+    const customer = typeof stripeInvoice.customer === 'string' 
+      ? await this.stripe.customers.retrieve(stripeInvoice.customer as string)
+      : stripeInvoice.customer;
+
+    const organizationId = customer.metadata?.organizationId;
+    if (!organizationId) return;
+
+    const invoiceNumber = generateInvoiceNumber();
+
+    await prisma.invoice.upsert({
+      where: { stripeInvoiceId: stripeInvoice.id },
+      update: {
+        status: 'PAID',
+        paidDate: new Date(stripeInvoice.status_transitions.paid_at! * 1000),
+      },
+      create: {
+        organizationId,
+        invoiceNumber,
+        amount: stripeInvoice.total! / 100,
+        currency: stripeInvoice.currency?.toUpperCase() || 'USD',
+        status: 'PAID',
+        stripeInvoiceId: stripeInvoice.id,
+        pdfUrl: stripeInvoice.invoice_pdf || undefined,
+        dueDate: new Date((stripeInvoice.due_date || Date.now() + 30 * 24 * 60 * 60 * 1000) * 1000),
+        paidDate: new Date(stripeInvoice.status_transitions.paid_at! * 1000),
+      },
+    });
+  }
+
+  /**
+   * Handle invoice failed
+   */
+  private async handleInvoiceFailed(stripeInvoice: Stripe.Invoice) {
+    if (!stripeInvoice.customer) return;
+
+    const customer = typeof stripeInvoice.customer === 'string' 
+      ? await this.stripe.customers.retrieve(stripeInvoice.customer as string)
+      : stripeInvoice.customer;
+
+    const organizationId = customer.metadata?.organizationId;
+    if (!organizationId) return;
+
+    const invoiceNumber = generateInvoiceNumber();
+
+    await prisma.invoice.upsert({
+      where: { stripeInvoiceId: stripeInvoice.id },
+      update: { status: 'FAILED' },
+      create: {
+        organizationId,
+        invoiceNumber,
+        amount: stripeInvoice.total! / 100,
+        currency: stripeInvoice.currency?.toUpperCase() || 'USD',
+        status: 'FAILED',
+        stripeInvoiceId: stripeInvoice.id,
+        dueDate: new Date((stripeInvoice.due_date || Date.now() + 3 * 24 * 60 * 60 * 1000) * 1000),
+      },
+    });
+
+    // Update subscription status
+    const subscription = await prisma.subscription.findUnique({
+      where: { stripeCustomerId: customer.id as string },
+    });
+
+    if (subscription) {
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'PAST_DUE' },
+      });
+    }
+  }
+
+  /**
+   * Handle upcoming invoice
+   */
+  private async handleUpcomingInvoice(stripeInvoice: Stripe.Invoice) {
+    if (!stripeInvoice.customer) return;
+
+    const customer = typeof stripeInvoice.customer === 'string' 
+      ? await this.stripe.customers.retrieve(stripeInvoice.customer as string)
+      : stripeInvoice.customer;
+
+    const organizationId = customer.metadata?.organizationId;
+    if (!organizationId) return;
+
+    const invoiceNumber = `INV-${Date.now()}`; // TODO: Implement proper invoice numbering
+
+    await prisma.invoice.create({
+      data: {
+        organizationId,
+        invoiceNumber,
+        amount: stripeInvoice.total! / 100,
+        currency: stripeInvoice.currency?.toUpperCase() || 'USD',
+        status: 'PENDING',
+        stripeInvoiceId: stripeInvoice.id,
+        dueDate: new Date((stripeInvoice.due_date || Date.now() + 30 * 24 * 60 * 60 * 1000) * 1000),
+      },
+    });
+  }
+
+  /**
+   * Get usage metrics for organization
+   */
+  async getUsageMetrics(organizationId: string, month?: Date) {
+    const date = month || new Date();
+    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+    const [rooms, recordings, messages] = await Promise.all([
+      prisma.room.count({
+        where: {
+          organizationId,
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+      }),
+      prisma.recording.aggregate({
+        where: {
+          room: { organizationId },
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+        _sum: { duration: true },
+      }),
+      prisma.chatMessage.count({
+        where: {
+          room: { organizationId },
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+      }),
+    ]);
+
+    const recordingMinutes = Math.ceil(((recordings._sum?.duration || 0) as number) / 60);
+
+    return {
+      roomsCreated: rooms,
+      recordingMinutes,
+      chatMessages: messages,
+      period: { start: startOfMonth, end: endOfMonth },
+    };
+  }
+
+  /**
+   * Track API usage
+   */
+  async trackApiUsage(organizationId: string) {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    await prisma.usageMetrics.upsert({
+      where: {
+        organizationId_month: {
+          organizationId,
+          month: today,
+        },
+      },
+      update: {
+        apiCallsCount: { increment: 1 },
+      },
+      create: {
+        organizationId,
+        month: today,
+        apiCallsCount: 1,
+      },
+    });
+  }
+}
+
+export default BillingService;
