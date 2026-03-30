@@ -51,7 +51,7 @@
     "cors": "^2.8.5",
     "csurf": "^1.11.0",
     "date-fns": "^4.1.0",
-    "dompurify": "^2.4.7",
+    "dompurify": "^3.3.2",
     "dotenv": "^16.3.1",
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
