@@ -1,11 +1,11 @@
 # ============================================
 # VANTAGE API - Production Dockerfile
 # ============================================
-FROM node:20-alpine AS base
+FROM node:20.12.0-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 
 # Copy root package files
@@ -16,7 +16,7 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/utils/package.json ./packages/utils/
 
 # Install dependencies
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps --only=production
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -32,15 +32,11 @@ RUN npx prisma generate
 WORKDIR /app
 RUN npm run build --workspace=api
 
-# Production image, copy all the files and run api
-FROM base AS runner
+# Production image
+FROM gcr.io/distroless/nodejs20-debian12 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 apiuser
 
 # Copy built application
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
@@ -53,10 +49,8 @@ COPY --from=builder /app/package.json ./
 # Copy Prisma client
 COPY --from=builder /app/apps/api/node_modules/.prisma ./apps/api/node_modules/.prisma
 
-# Set ownership
-RUN chown -R apiuser:nodejs /app
-
-USER apiuser
+# Set non-root user
+USER nonroot
 
 EXPOSE 4000
 

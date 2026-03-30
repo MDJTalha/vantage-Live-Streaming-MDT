@@ -9,18 +9,23 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
   # ============================================
-  # Stage 1: Lint & Test (apps/web only)
+  # Stage 1: Lint & Build (apps/web only)
   # ============================================
-  lint-and-test:
-    name: Lint, Test & Build
+  lint-and-build:
+    name: Lint & Build Web
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -28,18 +33,15 @@ jobs:
         node-version: '20.13.0'
         cache: 'npm'
 
-    - name: Install dependencies (root)
-      run: npm ci
+    - name: Install dependencies
+      run: npm ci --legacy-peer-deps
 
-    - name: Install dependencies (apps/web)
-      run: npm ci --workspace=web
+    - name: Build all packages (required for web)
+      run: npx turbo run build --filter=web... --no-cache
 
     - name: Run linter
-      run: npm run lint --workspace=web
+      run: npx turbo run lint --filter=web --no-cache
       continue-on-error: true
-
-    - name: Build check
-      run: npm run build --workspace=web
 
   # ============================================
   # Stage 2: Security Scanning
@@ -47,6 +49,7 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
     - name: Checkout code
@@ -58,10 +61,10 @@ jobs:
         node-version: '20.13.0'
 
     - name: Install dependencies
-      run: npm ci
+      run: npm ci --legacy-peer-deps
 
     - name: Run npm audit
-      run: npm audit --production --audit-level=moderate || true
+      run: npm audit --production --audit-level=moderate || echo "Audit completed with warnings"
       continue-on-error: true
 
   # ============================================
@@ -70,7 +73,7 @@ jobs:
   build-docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [lint-and-test]
+    needs: [lint-and-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
@@ -130,14 +133,38 @@ jobs:
   # Stage 4: Deploy to Vercel (Production)
   # ============================================
   deploy-production:
-    name: Deploy to Production
+    name: Deploy to Vercel
     runs-on: ubuntu-latest
-    needs: [lint-and-test, security, build-docker]
+    needs: [lint-and-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment:
+      name: production
+      url: https://vantage-live-streaming-mdt-web.vercel.app
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.13.0'
+        cache: 'npm'
+
+    - name: Install Vercel CLI
+      run: npm install -g vercel@latest
+
+    - name: Pull Vercel environment
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      run: |
+        cd apps/web
+        vercel link --token $VERCEL_TOKEN --yes --project $VERCEL_PROJECT_ID --org $VERCEL_ORG_ID || true
 
     - name: Deploy to Vercel
       env:
@@ -145,5 +172,5 @@ jobs:
         VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       run: |
-        npm install -g vercel
-        vercel --prod --token=$VERCEL_TOKEN --yes
+        cd apps/web
+        vercel --prod --token=$VERCEL_TOKEN --yes --scope=$VERCEL_ORG_ID

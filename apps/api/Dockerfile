@@ -1,6 +1,4 @@
-# VANTAGE API Service
-# Build stage uses Alpine with build tools (may report vulnerabilities in dev-only packages)
-# Production stage uses distroless which has minimal surface area and zero build dependencies
+# VANTAGE API Service - Production Dockerfile
 FROM node:20.12.0-alpine AS base
 
 # Install dependencies for native modules
@@ -14,7 +12,7 @@ COPY apps/api/package*.json ./apps/api/
 COPY packages/*/package*.json ./packages/
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --legacy-peer-deps --only=production
 
 # Copy source code
 COPY apps/api ./apps/api
@@ -27,7 +25,7 @@ RUN npm run build
 # Production image
 FROM gcr.io/distroless/nodejs20-debian12
 
-WORKDIR /app
+WORKDIR /app/apps/api
 
 # Copy built application
 COPY --from=base --chown=65534:65534 /app/apps/api/dist ./dist
