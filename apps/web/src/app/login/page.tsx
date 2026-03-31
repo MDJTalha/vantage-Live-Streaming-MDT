@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input } from '@vantage/ui';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, CheckCircle2, Video, Sparkles, Shield, Users, Copy, Check } from 'lucide-react';
 
@@ -52,6 +53,7 @@ function CredentialCopy({ value, label, type = 'text' }: { value: string; label:
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -64,7 +66,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Redirect if already logged in
+    if (user) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,18 +93,28 @@ export default function LoginPage() {
         return;
       }
 
-      if (password.length < 6) {
-        setError('Password must be at least 6 characters');
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters');
         setIsLoading(false);
         return;
       }
 
-      // Demo mode - works instantly without API
-      const demoUsers: Record<string, { password: string; user: any }> = {
-        'admin@vantage.live': {
-          password: '@admin@123#',
-          user: { id: '1', email: 'admin@vantage.live', name: 'VANTAGE Admin', role: 'ADMIN' }
-        },
+      // Call real authentication API
+      const result = await login(email, password);
+
+      if (result.success) {
+        setSuccess('Login successful! Redirecting...');
+        // Router push happens in auth context
+      } else {
+        setError(result.error || 'Login failed. Please check your credentials.');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
         'host@vantage.live': {
           password: '@host@123#',
           user: { id: '2', email: 'host@vantage.live', name: 'Demo Host', role: 'HOST' }
