@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd ../.. && npm ci --legacy-peer-deps && npx turbo run build --filter=web... --no-cache",
+  "buildCommand": "cd ../.. && npm ci --legacy-peer-deps && npx turbo run build --filter=web...",
   "installCommand": "cd ../.. && npm ci --legacy-peer-deps",
   "outputDirectory": ".next",
   "framework": "nextjs",
