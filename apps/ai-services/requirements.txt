@@ -1,9 +1,33 @@
-# VANTAGE AI Services Python Dependencies
-openai>=1.0.0
-transformers>=4.35.0
-torch>=2.0.0
-uvicorn>=0.24.0
-fastapi>=0.104.0
-python-multipart>=0.0.6
+# VANTAGE AI Services - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core
+anthropic>=0.18.0
+prisma>=0.11.0
+python-dotenv>=1.0.0
+
+# FastAPI (for AI orchestrator)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+
+# Vector search & embeddings
+sentence-transformers>=2.3.0
+faiss-cpu>=1.7.4
+
+# Data processing
 numpy>=1.24.0
-scipy>=1.11.0
+pandas>=2.0.0
+
+# Utilities
+aiofiles>=23.2.0
+httpx>=0.26.0
+python-multipart>=0.0.6
+
+# Logging & monitoring
+loguru>=0.7.0
+prometheus-client>=0.19.0
+
+# Testing (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
