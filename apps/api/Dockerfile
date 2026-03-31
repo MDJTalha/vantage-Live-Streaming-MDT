@@ -1,5 +1,5 @@
 # VANTAGE API Service - Production Dockerfile
-FROM node:20.12.0-alpine AS builder
+FROM node:25.8.2-alpine AS builder
 
 # Install dependencies for native modules
 RUN apk add --no-cache python3 make g++ ca-certificates libc6-compat
