@@ -884,22 +884,13 @@ export default function PremiumMeetingRoom() {
           </div>
         </div>
 
-        {/* Recording Controls Panel */}
+        {/* Recording Controls - Draggable Panel */}
         {showRecordingControls && (
-          <div className="absolute bottom-24 right-8 w-96 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="font-semibold text-white flex items-center gap-2">
-                <Circle className="h-4 w-4 text-red-500" />
-                Recording & Streaming
-              </h3>
-              <button onClick={() => setShowRecordingControls(false)} className="text-slate-400 hover:text-white">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-4">
-              <RecordingControls roomId={roomId as string} isHost={true} />
-            </div>
-          </div>
+          <RecordingControls 
+            roomId={roomId as string} 
+            isHost={true} 
+            onClose={() => setShowRecordingControls(false)} 
+          />
         )}
 
         {/* Settings Modal */}
