@@ -47,6 +47,73 @@ export default function PremiumMeetingRoom() {
   const [messages, setMessages] = useState<Array<{ id: string; sender: string; content: string; time: string }>>([]);
   const [messageInput, setMessageInput] = useState('');
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      
+      switch (key) {
+        case 'm':
+          // Toggle mute/unmute
+          e.preventDefault();
+          toggleAudio();
+          break;
+        case 'v':
+          // Toggle video
+          e.preventDefault();
+          toggleVideo();
+          break;
+        case 's':
+          // Toggle screen share
+          e.preventDefault();
+          toggleScreenShare();
+          break;
+        case 'h':
+          // Raise/lower hand
+          e.preventDefault();
+          setIsHandRaised(prev => !prev);
+          break;
+        case 'c':
+          // Toggle chat
+          e.preventDefault();
+          setShowChat(prev => !prev);
+          break;
+        case 'e':
+          // Send reaction
+          e.preventDefault();
+          // TODO: Show reaction picker
+          console.log('Send reaction');
+          break;
+        case 'f':
+          // Toggle fullscreen
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'd':
+          // Toggle video filter panel
+          e.preventDefault();
+          setShowFilters(prev => !prev);
+          break;
+        case 'escape':
+          // Close all panels
+          e.preventDefault();
+          setShowChat(false);
+          setShowParticipants(false);
+          setShowSettings(false);
+          setShowFilters(false);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleAudio, toggleVideo, toggleScreenShare, toggleFullscreen]); // Dependencies for callbacks
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -148,7 +215,7 @@ export default function PremiumMeetingRoom() {
     }
   }, []);
 
-  const toggleAudio = () => {
+  const toggleAudio = useCallback(() => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
@@ -156,9 +223,9 @@ export default function PremiumMeetingRoom() {
         setIsAudioEnabled(!isAudioEnabled);
       }
     }
-  };
+  }, [localStream, isAudioEnabled]);
 
-  const toggleVideo = () => {
+  const toggleVideo = useCallback(() => {
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
@@ -166,9 +233,9 @@ export default function PremiumMeetingRoom() {
         setIsVideoEnabled(!isVideoEnabled);
       }
     }
-  };
+  }, [localStream, isVideoEnabled]);
 
-  const toggleScreenShare = async () => {
+  const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
       window.location.reload();
     } else {
