@@ -484,7 +484,7 @@ export default function PremiumMeetingRoom() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-white">{user?.name || 'You'}</p>
-                    <p className="text-xs text-slate-400">{user?.role || 'Participant'}</p>
+                    {/* Role removed - cleaner UI */}
                   </div>
                 </div>
               </div>
