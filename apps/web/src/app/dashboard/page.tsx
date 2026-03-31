@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDebounce } from '@/hooks/useDebounce';
 import meetingService from '@/services/MeetingService';
+import ChatButton from '@/components/ChatButton';
 import {
   Video, Calendar, Clock, Users, Play, Shield, Lock, Bell, Search, Settings, LogOut,
   ChevronRight, Plus, Copy, MoreVertical, Edit2, Trash2, X, Mic, FolderOpen,
@@ -432,6 +433,9 @@ export default function Dashboard() {
       {showNotifications && (
         <NotificationsDropdown onClose={() => setShowNotifications(false)} />
       )}
+
+      {/* Chat Feature */}
+      <ChatButton />
     </div>
   );
 }
