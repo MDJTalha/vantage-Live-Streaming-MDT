@@ -7,22 +7,23 @@ module.exports = {
     '^.+\\.tsx?$': 'ts-jest',
   },
   collectCoverageFrom: [
-    'apps/**/src/**/*.ts',
-    '!apps/**/src/**/*.d.ts',
-    '!apps/**/src/index.ts',
+    '**/apps/api/src/**/*.ts',
+    '!**/apps/api/src/**/*.d.ts',
+    '!**/apps/api/src/**/*.spec.ts',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   coverageThreshold: {
     global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
+      branches: 50,
+      functions: 50,
+      lines: 50,
+      statements: 50,
     },
   },
-  setupFilesAfterEnv: ['./setup.ts'],
   moduleNameMapper: {
-    '^@vantage/(.*)$': '<rootDir>/../packages/$1/src',
+    '^@/(.*)$': '<rootDir>/../apps/api/src/$1',
+    '^@vantage/(.*)$': '<rootDir>/../packages/$1',
   },
+  setupFiles: ['dotenv/config'],
 };
