@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   transpilePackages: ['@vantage/ui', '@vantage/types', '@vantage/utils'],
   eslint: {
     ignoreDuringBuilds: true,
