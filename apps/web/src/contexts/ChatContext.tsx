@@ -27,6 +27,13 @@ export interface ChatRoom {
   unreadCount: number;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email?: string;
+  online: boolean;
+}
+
 interface ChatContextType {
   // Connection
   isConnected: boolean;
@@ -46,7 +53,7 @@ interface ChatContextType {
   getUnreadCount: () => number;
 
   // Users
-  users: { id: string; name: string; online: boolean }[];
+  users: User[];
   currentUserId: string;
 }
 
@@ -66,25 +73,45 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
-  const [users, setUsers] = useState<{ id: string; name: string; online: boolean }[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string>('user-' + Math.random().toString(36).substr(2, 9));
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   // Connect to Socket.IO
   const connect = useCallback(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    
+    // Get user from localStorage
+    const token = localStorage.getItem('accessToken');
+    let userId = '';
+    
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userId = payload.userId;
+      } catch (e) {
+        console.error('Error decoding token:', e);
+      }
+    }
+
     const newSocket = io(wsUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      auth: {
+        token: `Bearer ${token}`,
+      },
     });
 
     newSocket.on('connect', () => {
       console.log('✅ Chat connected to:', wsUrl);
       setIsConnected(true);
       
-      // Join room
-      newSocket.emit('join', { userId: currentUserId });
+      // Join with user ID
+      if (userId) {
+        newSocket.emit('join', { userId });
+        setCurrentUserId(userId);
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -93,6 +120,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
 
     newSocket.on('message', (message: ChatMessage) => {
+      console.log('📩 New message:', message);
       setMessages(prev => [...prev, message]);
       
       // Update room last message
@@ -105,18 +133,48 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    newSocket.on('users', (userList: { id: string; name: string; online: boolean }[]) => {
+    newSocket.on('users', (userList: User[]) => {
+      console.log('👥 Users updated:', userList);
       setUsers(userList);
     });
 
-    newSocket.on('room:update', (room: ChatRoom) => {
-      setRooms(prev => {
-        const exists = prev.find(r => r.id === room.id);
-        if (exists) {
-          return prev.map(r => r.id === room.id ? room : r);
-        }
-        return [...prev, room];
-      });
+    newSocket.on('user:joined', (data: { userId: string; name: string; timestamp: string }) => {
+      console.log('👤 User joined:', data);
+      // Add system message
+      const systemMessage: ChatMessage = {
+        id: `sys-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        content: `${data.name} joined the meeting`,
+        timestamp: data.timestamp,
+        type: 'broadcast',
+        read: true,
+      };
+      setMessages(prev => [...prev, systemMessage]);
+    });
+
+    newSocket.on('user:left', (data: { userId: string; timestamp: string }) => {
+      console.log('👤 User left:', data);
+      // Add system message
+      const systemMessage: ChatMessage = {
+        id: `sys-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        content: 'A user left the meeting',
+        timestamp: data.timestamp,
+        type: 'broadcast',
+        read: true,
+      };
+      setMessages(prev => [...prev, systemMessage]);
+    });
+
+    newSocket.on('reaction', (data: { userId: string; userName: string; type: string }) => {
+      console.log('😊 Reaction:', data);
+      // You can add reactions UI here
+    });
+
+    newSocket.on('error', (error: { message: string }) => {
+      console.error('❌ Socket error:', error);
     });
 
     setSocket(newSocket);
@@ -124,7 +182,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return () => {
       newSocket.close();
     };
-  }, [currentUserId]);
+  }, []);
 
   // Disconnect from Socket.IO
   const disconnect = useCallback(() => {
@@ -139,17 +197,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback((content: string, receiverId?: string) => {
     if (!socket || !content.trim()) return;
 
-    const message: ChatMessage = {
-      id: 'msg-' + Date.now(),
-      senderId: currentUserId,
-      senderName: 'You',
-      receiverId,
-      content: content.trim(),
-      timestamp: new Date().toISOString(),
-      type: receiverId ? 'direct' : 'broadcast',
-      read: false,
-    };
-
     if (receiverId) {
       // Direct message
       socket.emit('message:direct', {
@@ -162,10 +209,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         content: content.trim(),
       });
     }
-
-    // Optimistically add to local messages
-    setMessages(prev => [...prev, message]);
-  }, [socket, currentUserId]);
+  }, [socket]);
 
   // Send broadcast message to all
   const sendBroadcastMessage = useCallback((content: string) => {
@@ -178,7 +222,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (roomId) {
       // Mark messages as read
       setMessages(prev => prev.map(msg => 
-        msg.roomId === roomId ? { ...msg, read: true } : msg
+        msg.roomId === roomId || msg.receiverId === roomId ? { ...msg, read: true } : msg
       ));
       setRooms(prev => prev.map(room =>
         room.id === roomId ? { ...room, unreadCount: 0 } : room
@@ -209,7 +253,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Load initial rooms (mock data for now)
   useEffect(() => {
-    // Mock rooms - will be replaced with real data from API
     const mockRooms: ChatRoom[] = [
       {
         id: 'general',
