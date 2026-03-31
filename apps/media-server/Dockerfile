@@ -1,4 +1,5 @@
-FROM node:20-alpine AS base
+# VANTAGE Media Server - Production Dockerfile
+FROM node:20.12.0-alpine AS builder
 
 # Install build dependencies for mediasoup
 RUN apk add --no-cache \
@@ -7,64 +8,50 @@ RUN apk add --no-cache \
     g++ \
     linux-headers \
     openssl-dev \
-    libnice \
-    libnice-dev \
-    usrsctp-dev \
-    libsrtp-dev \
-    openssl \
+    libc6-compat \
     ca-certificates
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json ./
+# Copy root package files
+COPY package*.json ./
+COPY turbo.json ./
 
-# Install dependencies
-RUN npm install --production
+# Copy media-server package
+COPY apps/media-server/package*.json ./apps/media-server/
+COPY packages ./packages
+
+# Install all dependencies (including devDependencies for build)
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
-COPY . .
+COPY apps/media-server ./apps/media-server
+COPY packages ./packages
 
 # Build TypeScript
-RUN npm run build
+WORKDIR /app/apps/media-server
+RUN npx turbo run build --filter=media-server... --no-cache
 
 # Production image
-FROM node:20-alpine AS production
+FROM gcr.io/distroless/nodejs20-debian12
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    python3 \
-    openssl \
-    ca-certificates \
-    libnice \
-    usrsctp \
-    libsrtp
+WORKDIR /app/apps/media-server
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Copy built application
+COPY --from=builder --chown=65534:65534 /app/apps/media-server/dist ./dist
+COPY --from=builder --chown=65534:65534 /app/apps/media-server/node_modules ./node_modules
+COPY --from=builder --chown=65534:65534 /app/apps/media-server/package.json ./
+COPY --from=builder --chown=65534:65534 /app/node_modules ./../../node_modules
+COPY --from=builder --chown=65534:65534 /app/packages ./../../packages
 
-WORKDIR /app
+USER nonroot
 
-# Copy built application from base stage
-COPY --from=base --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=base --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=base --chown=nodejs:nodejs /app/package.json ./
-
-# Set environment
-ENV NODE_ENV=production
-
-# Expose ports
 EXPOSE 443
 EXPOSE 10000-60000/udp
 
-# Switch to non-root user
-USER nodejs
+ENV NODE_ENV=production
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:443/health || exit 1
 
-# Start application
 CMD ["node", "dist/index.js"]

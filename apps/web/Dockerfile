@@ -27,7 +27,6 @@ COPY --from=builder --chown=65534:65534 /app/apps/web/.next ./.next
 COPY --from=builder --chown=65534:65534 /app/apps/web/public ./public
 COPY --from=builder --chown=65534:65534 /app/apps/web/package.json ./package.json
 COPY --from=builder --chown=65534:65534 /app/node_modules ./node_modules
-COPY --from=builder --chown=65534:65534 /app/apps/web/node_modules ./node_modules
 COPY --from=builder --chown=65534:65534 /app/packages ./packages
 
 USER nonroot
@@ -36,5 +35,8 @@ EXPOSE 3000
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
 
 CMD ["node_modules/.bin/next", "start", "-p", "3000"]
