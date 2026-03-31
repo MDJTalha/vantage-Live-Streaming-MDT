@@ -1,0 +1,311 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  name              String
+  avatarUrl         String?
+  role              UserRole  @default(USER)
+  emailVerified     Boolean   @default(false)
+  mfaEnabled        Boolean   @default(false)
+  mfaSecret         String?
+  refreshToken      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  
+  // Relations
+  meetingsHosted    Meeting[]
+  participants      Participant[]
+  messages          Message[]
+  reactions         Reaction[]
+  recordings        Recording[]
+  podcasts          Podcast[]
+  
+  @@index([email])
+  @@index([role])
+}
+
+enum UserRole {
+  ADMIN
+  CEO
+  EXECUTIVE
+  MANAGER
+  USER
+  GUEST
+}
+
+// ============================================
+// MEETINGS & ROOMS
+// ============================================
+
+model Meeting {
+  id                String    @id @default(cuid())
+  code              String    @unique
+  name              String
+  hostId            String
+  hostName          String?
+  status            MeetingStatus @default(SCHEDULED)
+  maxParticipants   Int       @default(100)
+  password          String?
+  allowChat         Boolean   @default(true)
+  allowScreenShare  Boolean   @default(true)
+  allowRecording    Boolean   @default(true)
+  enableWaitingRoom Boolean   @default(false)
+  scheduledAt       DateTime?
+  duration          Int?      // in minutes
+  startedAt         DateTime?
+  endedAt           DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  host              User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  participants      Participant[]
+  messages          Message[]
+  recordings        Recording[]
+  reactions         Reaction[]
+  
+  @@index([code])
+  @@index([hostId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+// ============================================
+// PARTICIPANTS
+// ============================================
+
+model Participant {
+  id                String    @id @default(cuid())
+  meetingId         String
+  userId            String?
+  name              String
+  role              ParticipantRole @default(PARTICIPANT)
+  joinedAt          DateTime  @default(now())
+  leftAt            DateTime?
+  isSpeaking        Boolean   @default(false)
+  isHandRaised      Boolean   @default(false)
+  isMuted           Boolean   @default(false)
+  isVideoOff        Boolean   @default(false)
+  
+  // Relations
+  meeting           Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reactions         Reaction[]
+  
+  @@index([meetingId])
+  @@index([userId])
+}
+
+enum ParticipantRole {
+  HOST
+  CO_HOST
+  PRESENTER
+  PARTICIPANT
+  VIEWER
+}
+
+// ============================================
+// CHAT MESSAGES
+// ============================================
+
+model Message {
+  id                String    @id @default(cuid())
+  meetingId         String
+  senderId          String
+  content           String
+  messageType       MessageType @default(TEXT)
+  isBroadcast       Boolean   @default(false)
+  receiverId        String?
+  read              Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  
+  // Relations
+  meeting           Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  sender            User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  
+  @@index([meetingId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  SYSTEM
+}
+
+// ============================================
+// REACTIONS
+// ============================================
+
+model Reaction {
+  id                String    @id @default(cuid())
+  meetingId         String
+  participantId     String?
+  userId            String
+  type              String    // 👍, 👎, 😂, 😮, 😢, 😢, 🎉, etc.
+  createdAt         DateTime  @default(now())
+  expiresAt         DateTime?
+  
+  // Relations
+  meeting           Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  participant       Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([meetingId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================
+// RECORDINGS
+// ============================================
+
+model Recording {
+  id                String    @id @default(cuid())
+  meetingId         String
+  userId            String
+  title             String
+  description       String?
+  url               String
+  thumbnailUrl      String?
+  duration          Int       // in seconds
+  size              Int       // in bytes
+  format            String    @default("mp4")
+  status            RecordingStatus @default(PROCESSING)
+  isPublic          Boolean   @default(false)
+  downloadCount     Int       @default(0)
+  viewCount         Int       @default(0)
+  createdAt         DateTime  @default(now())
+  processedAt       DateTime?
+  
+  // Relations
+  meeting           Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([meetingId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum RecordingStatus {
+  PROCESSING
+  READY
+  FAILED
+  DELETED
+}
+
+// ============================================
+// PODCASTS
+// ============================================
+
+model Podcast {
+  id                String    @id @default(cuid())
+  userId            String
+  title             String
+  description       String?
+  coverImageUrl     String?
+  isPublished       Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodes          Episode[]
+  
+  @@index([userId])
+  @@index([isPublished])
+}
+
+model Episode {
+  id                String    @id @default(cuid())
+  podcastId         String
+  title             String
+  description       String?
+  audioUrl          String?
+  videoUrl          String?
+  duration          Int?      // in seconds
+  episodeNumber     Int
+  seasonNumber      Int       @default(1)
+  isPublished       Boolean   @default(false)
+  publishedAt       DateTime?
+  viewCount         Int       @default(0)
+  likeCount         Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  podcast           Podcast   @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+  
+  @@index([podcastId])
+  @@index([isPublished])
+  @@index([episodeNumber])
+}
+
+// ============================================
+// ANALYTICS & METRICS
+// ============================================
+
+model AnalyticsEvent {
+  id                String    @id @default(cuid())
+  eventType         String
+  userId            String?
+  meetingId         String?
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  
+  @@index([eventType])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id                String    @id @default(cuid())
+  userId            String
+  type              NotificationType
+  title             String
+  message           String
+  meetingId         String?
+  isRead            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  MEETING_STARTING
+  PARTICIPANT_JOINED
+  PARTICIPANT_LEFT
+  RECORDING_READY
+  MESSAGE_RECEIVED
+  INVITATION
+}
