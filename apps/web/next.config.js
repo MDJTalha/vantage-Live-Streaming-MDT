@@ -1,16 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   transpilePackages: ['@vantage/ui', '@vantage/types', '@vantage/utils'],
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+
+  // Disable SWC compiler - use Babel instead (Node.js 24 compatibility)
+  swcMinify: false,
+
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb'
     }
   },
+
   images: {
     remotePatterns: [
       {
@@ -18,7 +19,10 @@ const nextConfig = {
         hostname: '**'
       }
     ]
-  }
+  },
+
+  // Metadata base for social images
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
 }
 
 module.exports = nextConfig

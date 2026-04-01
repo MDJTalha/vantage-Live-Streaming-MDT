@@ -1,3 +1,4 @@
+<<<<<<< MDJTalha-patch-1
 # For most projects, this workflow file will not need changing; you simply need
 # to commit it to your repository.
 #
@@ -9,10 +10,13 @@
 # the `language` matrix defined below to confirm you have the correct set of
 # supported CodeQL languages.
 #
+=======
+>>>>>>> main
 name: "CodeQL Advanced"
 
 on:
   push:
+<<<<<<< MDJTalha-patch-1
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
@@ -37,11 +41,29 @@ jobs:
 
       # only required for workflows in private repositories
       actions: read
+=======
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sundays at midnight
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      packages: read
+>>>>>>> main
       contents: read
 
     strategy:
       fail-fast: false
       matrix:
+<<<<<<< MDJTalha-patch-1
         include:
         - language: actions
           build-mode: none
@@ -66,11 +88,25 @@ jobs:
     #   uses: actions/setup-example@v1
 
     # Initializes the CodeQL tools for scanning.
+=======
+        language: ['javascript-typescript', 'python']
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+>>>>>>> main
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
+<<<<<<< MDJTalha-patch-1
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
         # Prefix the list here with "+" to use these queries and those in the config file.
@@ -94,8 +130,15 @@ jobs:
         echo '  make bootstrap'
         echo '  make release'
         exit 1
+=======
+        queries: security-extended
+>>>>>>> main
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
       with:
+<<<<<<< MDJTalha-patch-1
         category: "/language:${{matrix.language}}"
+=======
+        category: "/language:${{ matrix.language }}"
+>>>>>>> main
