@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ChatProvider } from '@/contexts/ChatContext';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -221,6 +222,7 @@ export default function RootLayout({
             {children}
           </ChatProvider>
         </AuthProvider>
+        <SpeedInsights />
         
         {/* Structured Data for WebPage */}
         <script
