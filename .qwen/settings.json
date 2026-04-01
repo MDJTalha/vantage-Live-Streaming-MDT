@@ -9,7 +9,15 @@
       "Bash(node *)",
       "Bash(npm *)",
       "Bash(tasklist)",
-      "Bash(npx *)"
+      "Bash(npx *)",
+      "Bash(curl *)",
+      "Bash(taskkill *)",
+      "Bash(docker *)",
+      "Bash(docker-compose *)",
+      "Bash(where *)",
+      "Bash(reg *)",
+      "Bash(c:\\node20\\node.exe *)",
+      "Bash(ping *)"
     ]
   },
   "$version": 3

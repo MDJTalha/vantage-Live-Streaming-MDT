@@ -1,0 +1,27 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/config/package.json ./packages/config/ 2>/dev/null || true
+COPY packages/types/package.json ./packages/types/ 2>/dev/null || true
+COPY packages/utils/package.json ./packages/utils/ 2>/dev/null || true
+
+RUN npm ci --legacy-peer-deps || true
+
+# Generate Prisma client
+WORKDIR /app/apps/api
+RUN npx prisma generate || true
+
+WORKDIR /app
+
+# Expose port
+EXPOSE 4000
+
+# Start dev server
+CMD ["npm", "run", "dev"]
