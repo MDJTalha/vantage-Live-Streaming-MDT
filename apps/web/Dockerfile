@@ -1,5 +1,5 @@
 # VANTAGE Web Frontend - Multi-stage Build
-FROM node:20.12.0-alpine AS builder
+FROM node:25.8.2-alpine AS builder
 
 WORKDIR /app
 
