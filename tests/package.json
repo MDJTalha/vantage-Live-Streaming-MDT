@@ -1,27 +1,27 @@
 {
-  "name": "vantage-tests",
+  "name": "tests",
   "version": "1.0.0",
-  "private": true,
+  "description": "VANTAGE Platform - Test Suite",
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:integration": "jest --config jest.integration.config.js",
-    "test:load": "k6 run load/k6-load-test.js",
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.0",
-    "@types/node": "^20.10.0",
-    "@types/supertest": "^6.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
-    "eslint": "^8.55.0",
+    "@playwright/test": "^1.42.0",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.0",
+    "@types/supertest": "^6.0.2",
     "jest": "^29.7.0",
-    "k6": "^0.0.0",
-    "supertest": "^6.3.0",
-    "ts-jest": "^29.1.0",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.1.2",
     "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "dotenv": "^16.3.1"
   }
 }

@@ -9,17 +9,23 @@ interface User {
   name: string;
   avatarUrl?: string;
   role: string;
+  emailVerified?: boolean;
+  mfaEnabled?: boolean;
+  lastLoginAt?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  updateUser: (data: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -28,146 +34,162 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
-    const demoUser = localStorage.getItem('demoUser');
     
-    // If we have a demo user, use it directly
-    if (demoUser) {
-      try {
-        setUser(JSON.parse(demoUser));
-      } catch (e) {
-        console.error('Error parsing demo user:', e);
-      }
-      setIsLoading(false);
-    } else if (token) {
-      fetchUser();
+    if (token) {
+      fetchUser(token);
     } else {
       setIsLoading(false);
     }
   }, []);
 
-  async function fetchUser() {
+  async function fetchUser(token: string) {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
+      const response = await fetch(`${API_URL}/api/v1/auth/me`, {
+        method: 'GET',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch user');
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      } else {
+        // Token invalid, clear it
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        setUser(null);
       }
-
-      const data = await response.json();
-      setUser(data.data);
     } catch (error) {
       console.error('Error fetching user:', error);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
+      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Login failed');
+      if (response.ok) {
+        // Save tokens
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        
+        // Set user
+        setUser(data.user);
+        
+        // Redirect to dashboard
+        router.push('/dashboard');
+        
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Login failed' };
       }
-
-      localStorage.setItem('accessToken', data.data.tokens.accessToken);
-      localStorage.setItem('refreshToken', data.data.tokens.refreshToken);
-      setUser(data.data.user);
-      router.push('/dashboard');
     } catch (error: any) {
       console.error('Login error:', error);
-      // Don't throw - let the page handle demo mode fallback
-      throw error;
+      return { success: false, error: 'Network error. Please try again.' };
     }
   }
 
-  async function register(email: string, password: string, name: string) {
+  async function register(email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // First try the API
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-        const response = await fetch(`${apiUrl}/api/v1/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, name }),
-        });
+      const response = await fetch(`${API_URL}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name }),
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (!response.ok) {
-          throw new Error(data.error?.message || 'Registration failed');
-        }
-
-        localStorage.setItem('accessToken', data.data.tokens.accessToken);
-        localStorage.setItem('refreshToken', data.data.tokens.refreshToken);
-        setUser(data.data.user);
+      if (response.ok) {
+        // Save tokens
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        
+        // Set user
+        setUser(data.user);
+        
+        // Redirect to dashboard
         router.push('/dashboard');
-        return;
-      } catch (apiError) {
-        // If API fails (offline), fall back to demo mode
-        console.log('API unavailable, using demo mode');
+        
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Registration failed' };
       }
-
-      // Demo mode fallback
-      const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-      const newUser = {
-        id: 'user-' + Date.now(),
-        name,
-        email,
-        role: 'USER',
-      };
-      registeredUsers.push(newUser);
-      localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
-
-      const mockTokens = {
-        accessToken: 'demo-access-token-' + Date.now(),
-        refreshToken: 'demo-refresh-token-' + Date.now(),
-      };
-
-      localStorage.setItem('accessToken', mockTokens.accessToken);
-      localStorage.setItem('refreshToken', mockTokens.refreshToken);
-      setUser(newUser);
-      router.push('/dashboard');
     } catch (error: any) {
-      console.error('Register error:', error);
-      throw error;
+      console.error('Registration error:', error);
+      return { success: false, error: 'Network error. Please try again.' };
     }
   }
 
-  function logout() {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
-    router.push('/');
+  async function logout() {
+    try {
+      // Call logout endpoint to invalidate refresh token
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        await fetch(`${API_URL}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Clear local state
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      setUser(null);
+      router.push('/login');
+    }
   }
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        login,
-        register,
-        logout,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  async function updateUser(data: Partial<User>) {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/auth/me`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Update user error:', error);
+    }
+  }
+
+  const value: AuthContextType = {
+    user,
+    isLoading,
+    login,
+    register,
+    logout,
+    updateUser,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

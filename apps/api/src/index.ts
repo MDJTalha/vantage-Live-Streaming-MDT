@@ -13,6 +13,9 @@ import engagementRoutes from './routes/engagement';
 import healthRoutes from './routes/health';
 import onboardingRoutes from './routes/onboarding';
 import meetingRoutes from './routes/meetings';
+import recordingRoutes from './routes/recordings';
+import analyticsRoutes from './routes/analytics';
+import aiRoutes from './routes/ai';
 import AuthMiddleware from './middleware/auth';
 import RateLimiter from './middleware/rateLimiter';
 import DatabaseService from './db/service';
@@ -205,6 +208,15 @@ app.use('/api/v1/rooms', AuthMiddleware.optional, roomRoutes);
 
 // Meeting routes (NEW - Production Ready)
 app.use('/api/v1/meetings', AuthMiddleware.optional, meetingRoutes);
+
+// Recording routes (NEW - Phase 5)
+app.use('/api/v1/recordings', AuthMiddleware.optional, recordingRoutes);
+
+// Analytics routes (NEW - Phase 6)
+app.use('/api/v1/analytics', AuthMiddleware.optional, analyticsRoutes);
+
+// AI routes (NEW - Phase 8: AI Integration)
+app.use('/api/v1/ai', AuthMiddleware.optional, aiRoutes);
 
 // Chat routes
 app.use('/api/v1/chat', AuthMiddleware.optional, chatRoutes);
