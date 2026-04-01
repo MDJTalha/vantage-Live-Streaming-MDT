@@ -16,7 +16,8 @@
       "Bash(docker-compose *)",
       "Bash(where *)",
       "Bash(reg *)",
-      "Bash(c:\\node20\\node.exe *)"
+      "Bash(c:\\node20\\node.exe *)",
+      "Bash(ping *)"
     ]
   },
   "$version": 3
