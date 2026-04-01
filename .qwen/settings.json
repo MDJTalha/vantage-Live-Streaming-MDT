@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm ci *)"
+      "Bash(npm ci *)",
+      "Bash(findstr *)",
+      "Bash(timeout *)",
+      "Bash(netstat *)"
     ]
-  }
+  },
+  "$version": 3
 }
