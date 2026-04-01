@@ -1,376 +1,376 @@
-# 🚀 VANTAGE - How to Start Servers
+# VANTAGE - How to Start the System
 
-**Last Updated:** March 20, 2026  
-**Version:** 2.2.0
+**Quick Reference Guide**
 
 ---
 
-## ⚡ Quick Start (Choose One)
+## 🚀 Quick Start (Development)
 
-### **Option 1: Recommended (start-dev.bat)**
+### Option 1: Start All Services (Recommended)
 
-```batch
-:: Double-click this file:
-start-dev.bat
+```bash
+# From project root
+npm run dev
 ```
 
-**What it does:**
-- ✅ Checks all prerequisites
-- ✅ Starts Docker (PostgreSQL, Redis)
-- ✅ Builds UI package
-- ✅ Starts API + Web in background
-- ✅ Shows status and logs
+This starts:
+- ✅ Web Frontend (port 3000)
+- ✅ API Server (port 4000)
+- ✅ Media Server (port 443)
+
+**Wait for:** `Ready in 5s` message
 
 **Access:** http://localhost:3000
 
 ---
 
-### **Option 2: Simple Start (start-simple.bat)**
+### Option 2: Start Individual Services
 
-```batch
-:: Double-click this file:
-start-simple.bat
-```
-
-**What it does:**
-- ✅ Opens 2 separate windows
-- ✅ API Server in one window
-- ✅ Web Frontend in another
-- ✅ Easy to see errors
-
-**Best for:** Debugging, seeing live logs
-
----
-
-### **Option 3: Manual Start**
-
-```batch
-:: Open 2 terminals
-
-:: Terminal 1 - API
-cd c:\Projects\Live-Streaming-\apps\api
-npm run dev
-
-:: Terminal 2 - Web
-cd c:\Projects\Live-Streaming-\apps\web
+#### Start Web Frontend Only
+```bash
+cd apps/web
 npm run dev
 ```
+**Access:** http://localhost:3000
 
-**Best for:** Development, debugging
+#### Start API Server Only
+```bash
+cd apps/api
+npm run dev
+```
+**Access:** http://localhost:4000
+
+#### Start Media Server Only
+```bash
+cd apps/media-server
+npm run dev
+```
+**Access:** https://localhost:443
 
 ---
 
-## 📋 All Batch Files Explained
+## 📋 Prerequisites
 
-| File | Purpose | When to Use |
-|------|---------|-------------|
-| **start-dev.bat** | Full startup with checks | Daily development ✅ |
-| **start-simple.bat** | Direct start, 2 windows | Debugging ✅ |
-| **start.bat** | Background start | Quick testing |
-| **setup.bat** | First-time setup | Initial install |
-| **start-pm2.bat** | Production mode | Production deploy |
+### Required Software
+- ✅ Node.js 20.0.0 or higher
+- ✅ npm 10.0.0 or higher
+- ✅ Git
+
+### Check Versions
+```bash
+node --version  # Should show v20.x.x
+npm --version   # Should show 10.x.x
+```
+
+### Install Dependencies (First Time Only)
+```bash
+# From project root
+npm ci --legacy-peer-deps
+```
 
 ---
 
-## 🔧 Troubleshooting
+## 🔧 Common Issues & Solutions
 
-### **Problem: Window closes immediately**
+### Issue 1: Port 3000 Already in Use
+
+**Error:** `Port 3000 is already in use`
 
 **Solution:**
-```batch
-:: Use start-simple.bat instead
-start-simple.bat
-```
-
----
-
-### **Problem: Port 3000 or 4000 already in use**
-
-**Solution 1 - Find and kill process:**
-```batch
-:: Find process on port 3000
+```bash
+# Windows - Kill process on port 3000
 netstat -ano | findstr :3000
+taskkill /PID <PID_NUMBER> /F
 
-:: Kill process (replace PID with actual number)
-taskkill /PID <PID> /F
+# Or use a different port
+npm run dev -- -p 3001
 ```
 
-**Solution 2 - Use different port:**
-```batch
-:: In apps\web\package.json, change:
-"dev": "next dev -p 3001"
-```
+### Issue 2: Module Not Found
 
----
-
-### **Problem: Docker not starting**
+**Error:** `Cannot find module '@vantage/ui'`
 
 **Solution:**
-```batch
-:: Start Docker Desktop manually
-:: Then run:
-docker-compose up -d postgres redis
+```bash
+# Reinstall dependencies
+npm ci --legacy-peer-deps
 
-:: Wait 15 seconds, then:
-start-dev.bat
+# Or clean and reinstall
+npm run clean
+npm ci --legacy-peer-deps
 ```
 
----
+### Issue 3: Build Errors
 
-### **Problem: npm install fails**
+**Error:** TypeScript or build errors
 
 **Solution:**
-```batch
-:: Clear cache
-npm cache clean --force
+```bash
+# Clear build cache
+rm -rf apps/web/.next
+rm -rf apps/api/dist
+rm -rf apps/media-server/dist
 
-:: Delete node_modules
-rmdir /s /q node_modules
+# Rebuild
+npm run build
+```
 
-:: Reinstall
-npm install
+### Issue 4: Database Connection Error
+
+**Error:** `Cannot connect to database`
+
+**Solution:**
+```bash
+# Make sure PostgreSQL is running
+# Check .env.local has correct DATABASE_URL
+# Run migrations
+cd apps/api
+npx prisma migrate dev
 ```
 
 ---
 
-### **Problem: Turbo errors**
+## 🌐 Access URLs
 
-**Solution - Start without Turbo:**
-```batch
-:: Use start-simple.bat (starts each app directly)
-start-simple.bat
+| Service | URL | Port |
+|---------|-----|------|
+| Web Frontend | http://localhost:3000 | 3000 |
+| API Server | http://localhost:4000 | 4000 |
+| Media Server | https://localhost:443 | 443 |
+| Admin Panel | http://localhost:3000/admin | 3000 |
+| Dashboard | http://localhost:3000/dashboard | 3000 |
+
+---
+
+## 📝 Environment Setup
+
+### 1. Create .env.local File
+
+```bash
+# Copy from example
+cp .env.example .env.local
+```
+
+### 2. Fill in Required Variables
+
+**Minimum Required:**
+```env
+# Database
+DATABASE_URL=postgresql://vantage:password@localhost:5432/vantage
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Authentication
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+ENCRYPTION_KEY=your-encryption-key-min-32-chars
+
+# Frontend
+FRONTEND_URL=http://localhost:3000
+
+# API
+API_PORT=4000
+
+# Media Server
+MEDIA_SERVER_PORT=443
 ```
 
 ---
 
-## ✅ Success Checklist
+## 🐛 Troubleshooting
 
-After starting, verify:
-
-- [ ] Two processes running (API + Web)
-- [ ] Port 3000 listening (Web)
-- [ ] Port 4000 listening (API)
-- [ ] No errors in logs
-- [ ] Can access http://localhost:3000
-
-**Check ports:**
-```batch
-netstat -ano | findstr :3000
-netstat -ano | findstr :4000
-```
-
-**View logs:**
-```batch
-:: API logs
-type logs\api.log
-
-:: Web logs
-type logs\web.log
-```
-
----
-
-## 🎯 Expected Output
-
-### **start-dev.bat Output:**
-
-```
-============================================
-  VANTAGE Platform - Development Mode
-============================================
-
-[1/6] Checking Node.js...
-OK: v24.8.0
-
-[2/6] Checking dependencies...
-OK: Dependencies installed
-
-[3/6] Setting up environment...
-OK: .env.local exists
-
-[4/6] Starting infrastructure...
-OK: Database running
-
-[5/6] Building UI package...
-OK: UI built
-
-[6/6] Starting servers...
-
-Starting API Server (Port 4000)...
-OK: API starting...
-
-Starting Web Frontend (Port 3000)...
-OK: Web starting...
-
-============================================
-  VANTAGE Servers Running!
-============================================
-
-  Web App:  http://localhost:3000
-  API:      http://localhost:4000
-  WebSocket: ws://localhost:4000
-
-  Demo Credentials:
-  - admin@vantage.live / admin123
-  - host@vantage.live / host123
-  - user@vantage.live / user123
-
-============================================
-```
-
----
-
-### **start-simple.bat Output:**
-
-Opens two windows:
-
-**Window 1 - API:**
-```
-> api@0.0.1 dev
-> tsx watch src/index.ts
-
-VANTAGE API Server
-Port: 4000
-Environment: development
-```
-
-**Window 2 - Web:**
-```
-> web@0.0.1 dev
-> next dev
-
-  ▲ Next.js 14.2.35
-  - Local: http://localhost:3000
-
-  ✓ Ready in 2s
-```
-
----
-
-## 🛑 How to Stop Servers
-
-### **If using start-dev.bat:**
-```batch
-:: Press Ctrl+C in the batch window
-:: Type 'Y' to confirm
-```
-
-### **If using start-simple.bat:**
-```batch
-:: Close the two server windows
-:: Or press Ctrl+C in each window
-```
-
-### **Force stop all:**
-```batch
-:: Kill all Node processes for VANTAGE
-taskkill /FI "WINDOWTITLE eq VANTAGE*" /T /F
-
-:: Or kill by port
-for /f "tokens=5" %a in ('netstat -ano ^| findstr ":3000 :4000"') do taskkill /PID %a /F
-```
-
----
-
-## 📊 Server Status
-
-### **Check if running:**
-
-```batch
-:: Check Web (Port 3000)
-netstat -ano | findstr :3000
-
-:: Check API (Port 4000)
-netstat -ano | findstr :4000
-
-:: Check Docker
-docker ps
-```
-
-### **Test endpoints:**
-
-```batch
-:: Test API health
-curl http://localhost:4000/health
-
-:: Test Web
-curl http://localhost:3000
-```
-
----
-
-## 🎨 For UI/UX Testing
-
-Once servers are running:
-
-1. **Open:** http://localhost:3000
-2. **See:** Premium landing page
-3. **Click:** "Sign In"
-4. **Login:** admin@vantage.live / admin123
-5. **Explore:** Dashboard with premium UI
-
----
-
-## 📞 Still Having Issues?
+### Server Won't Start
 
 1. **Check Node.js version:**
-   ```batch
+   ```bash
    node --version
-   :: Should be v20.0.0 or higher
+   ```
+   Must be v20 or higher
+
+2. **Check if port is available:**
+   ```bash
+   netstat -ano | findstr :3000
    ```
 
-2. **Check npm:**
-   ```batch
-   npm --version
-   :: Should be 10.0.0 or higher
+3. **Clear cache and reinstall:**
+   ```bash
+   npm run clean
+   npm ci --legacy-peer-deps
    ```
 
-3. **Reinstall dependencies:**
-   ```batch
-   npm install
-   cd apps\api && npm install
-   cd apps\web && npm install
+4. **Check for errors in logs:**
+   - Look for error messages in terminal
+   - Check `apps/web/logs/` directory
+
+### Pages Not Loading
+
+1. **Check if server is running:**
+   - Look for "Ready" message in terminal
+   - Check terminal for errors
+
+2. **Clear browser cache:**
+   - Press `Ctrl + Shift + Delete`
+   - Clear cached images
+
+3. **Try incognito mode:**
+   - `Ctrl + Shift + N` (Chrome)
+   - `Ctrl + Shift + P` (Firefox)
+
+### API Not Responding
+
+1. **Check API server is running:**
+   ```bash
+   curl http://localhost:4000/api/v1/health
    ```
 
-4. **Check logs:**
-   ```batch
-   logs\api.log
-   logs\web.log
+2. **Check .env.local configuration:**
+   - Verify DATABASE_URL
+   - Verify REDIS_URL
+
+3. **Restart API server:**
+   ```bash
+   cd apps/api
+   npm run dev
    ```
 
 ---
 
-## 🎯 Recommended Workflow
+## 📦 Build for Production
 
-**Daily Development:**
-```batch
-:: Morning - Start
-start-dev.bat
-
-:: Work on code...
-:: Test in browser at http://localhost:3000
-
-:: Evening - Stop
-:: Close window or Ctrl+C
+### Build All Services
+```bash
+npm run build
 ```
 
-**First Time Setup:**
-```batch
-:: Run setup first
-setup.bat
+### Start Production Server
+```bash
+# Web
+cd apps/web
+npm run start
 
-:: Then start
-start-dev.bat
-```
+# API
+cd apps/api
+npm run start
 
-**Debugging:**
-```batch
-:: Use simple start for visible logs
-start-simple.bat
-
-:: Watch both windows for errors
+# Media Server
+cd apps/media-server
+npm run start
 ```
 
 ---
 
-**© 2024 VANTAGE. All Rights Reserved.**
+## 🐳 Docker (Alternative)
+
+### Build Docker Images
+```bash
+npm run docker:build
+```
+
+### Start with Docker
+```bash
+npm run docker:up
+```
+
+### Stop Docker
+```bash
+npm run docker:down
+```
+
+---
+
+## 📞 Quick Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start all development servers |
+| `npm run build` | Build all services |
+| `npm run clean` | Clean build artifacts |
+| `npm run lint` | Run linter on all services |
+| `npm run test` | Run tests on all services |
+| `npm run docker:build` | Build Docker images |
+| `npm run docker:up` | Start Docker containers |
+| `npm run docker:down` | Stop Docker containers |
+
+---
+
+## 🎯 Development Workflow
+
+### 1. First Time Setup
+```bash
+# Clone repository
+git clone <repository-url>
+cd Live-Streaming-
+
+# Install dependencies
+npm ci --legacy-peer-deps
+
+# Create environment file
+cp .env.example .env.local
+
+# Edit .env.local with your settings
+
+# Start development
+npm run dev
+```
+
+### 2. Daily Development
+```bash
+# Start development
+npm run dev
+
+# Make changes to code
+# Changes auto-reload
+
+# Test in browser at http://localhost:3000
+```
+
+### 3. Before Committing
+```bash
+# Run linter
+npm run lint
+
+# Run tests
+npm run test
+
+# Build to check for errors
+npm run build
+```
+
+---
+
+## 📊 System Requirements
+
+### Minimum
+- RAM: 8GB
+- CPU: 4 cores
+- Disk: 10GB free space
+
+### Recommended
+- RAM: 16GB
+- CPU: 8 cores
+- Disk: 20GB free space (SSD)
+
+---
+
+## 🔗 Useful Links
+
+- **Dashboard:** http://localhost:3000/dashboard
+- **Profile:** http://localhost:3000/account/profile
+- **Analytics:** http://localhost:3000/analytics
+- **Admin:** http://localhost:3000/admin
+- **API Health:** http://localhost:4000/api/v1/health
+
+---
+
+## 🆘 Still Having Issues?
+
+1. **Check the logs** in terminal
+2. **Review error messages** carefully
+3. **Search for error** in documentation
+4. **Create an issue** on GitHub
+5. **Check existing issues** for solutions
+
+---
+
+**Last Updated:** March 31, 2026  
+**Version:** 0.0.1
