@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@vantage/ui';
-import { Circle, Pause, Square, Download, Trash2, ExternalLink, Video } from 'lucide-react';
+import { Circle, Pause, Square, Download, Trash2, ExternalLink, Video, X, Minimize2, GripVertical } from 'lucide-react';
 import { type Recording } from '@/services/RecordingService';
 import { streamingService, type StreamConfig } from '@/services/StreamingService';
 
 interface RecordingControlsProps {
   roomId: string;
   isHost: boolean;
+  onClose: () => void;
 }
 
-export function RecordingControls({ roomId, isHost }: RecordingControlsProps) {
+export function RecordingControls({ roomId, isHost, onClose }: RecordingControlsProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -19,11 +20,63 @@ export function RecordingControls({ roomId, isHost }: RecordingControlsProps) {
   const [showStreamModal, setShowStreamModal] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Draggable state
+  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isMinimized, setIsMinimized] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Load recordings on mount
   useEffect(() => {
     loadRecordings();
   }, []);
+
+  // Drag handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only allow dragging from header area
+    if (panelRef.current) {
+      const rect = panelRef.current.getBoundingClientRect();
+      setDragOffset({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+      setIsDragging(true);
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+
+      // Boundary checks
+      const maxX = window.innerWidth - (panelRef.current?.offsetWidth || 300);
+      const maxY = window.innerHeight - (panelRef.current?.offsetHeight || 200);
+
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY)),
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
 
   // Stream configuration
   const [streamConfig, setStreamConfig] = useState<Omit<StreamConfig, 'roomId'>>({
@@ -248,136 +301,180 @@ export function RecordingControls({ roomId, isHost }: RecordingControlsProps) {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Recording & Streaming Buttons */}
-      <div className="flex gap-2">
-        {isHost && (
-          <>
-            {/* Record Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={isRecording ? 'destructive' : 'secondary'}
-                    size="lg"
-                    onClick={isRecording ? handleStopRecording : handleStartRecording}
-                    disabled={isLoading}
-                    className="h-10 px-3"
-                  >
-                    {isRecording ? (
-                      <>
-                        <Pause className="h-4 w-4 mr-2" />
-                        Stop
-                      </>
-                    ) : (
-                      <>
-                        <Circle className="h-4 w-4 mr-2" />
-                        Record
-                      </>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isRecording ? 'Stop Recording' : 'Start Recording'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            {/* Stream Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={isStreaming ? 'destructive' : 'secondary'}
-                    size="lg"
-                    onClick={() => isStreaming ? handleStopStreaming() : setShowStreamModal(true)}
-                    disabled={isLoading}
-                    className="h-10 px-3"
-                  >
-                    {isStreaming ? (
-                      <>
-                        <Square className="h-4 w-4 mr-2" />
-                        End Stream
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Go Live
-                      </>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isStreaming ? 'End Live Stream' : 'Start Live Stream'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </>
-        )}
-      </div>
-
-      {/* Recording Indicator */}
-      {isRecording && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 animate-pulse">
-          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-sm font-medium text-red-500">Recording</span>
-          <span className="text-xs text-red-400 font-mono">{formatTime(recordingTime)}</span>
-        </div>
-      )}
-
-      {/* Streaming Indicator */}
-      {isStreaming && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <span className="text-sm font-medium text-blue-500">Live Streaming</span>
-          <span className="text-xs text-blue-400 font-mono">{formatTime(streamTime)}</span>
-        </div>
-      )}
-
-      {/* Recordings List */}
-      {recordings.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-white">Recordings</h4>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {recordings.map((recording) => (
-              <div
-                key={recording.id}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-800 border border-slate-700"
-              >
-                <div className="flex items-center gap-2">
-                  <Video className="h-4 w-4 text-amber-400" />
-                  <div>
-                    <p className="text-xs font-medium text-white truncate max-w-[150px]">
-                      {recording.title}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      {formatTime(recording.duration)} • {recording.format.toUpperCase()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDownloadRecording(recording.key)}
-                    className="h-7 w-7 p-0"
-                  >
-                    <Download className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteRecording(recording.key)}
-                    className="h-7 w-7 p-0 text-red-400 hover:text-red-300"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+    <>
+      {/* Draggable Recording & Streaming Panel */}
+      <div
+        ref={panelRef}
+        className="fixed z-50 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl"
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: isMinimized ? '280px' : '320px',
+          minHeight: isMinimized ? 'auto' : '200px',
+        }}
+      >
+        {/* Header - Drag Handle */}
+        <div
+          onMouseDown={handleMouseDown}
+          className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700 rounded-t-2xl cursor-move"
+        >
+          <div className="flex items-center gap-2">
+            <GripVertical className="h-4 w-4 text-slate-500" />
+            <h3 className="text-base font-semibold text-white">Recording & Streaming</h3>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setIsMinimized(!isMinimized)}
+              className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors"
+              title={isMinimized ? 'Expand' : 'Minimize'}
+            >
+              <Minimize2 className={`h-4 w-4 text-slate-400 ${isMinimized ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors"
+              title="Close"
+            >
+              <X className="h-4 w-4 text-slate-400 hover:text-red-400" />
+            </button>
           </div>
         </div>
-      )}
+
+        {/* Content */}
+        {!isMinimized && (
+          <div className="p-4 space-y-4">
+            {/* Recording & Streaming Buttons */}
+            <div className="flex gap-2">
+              {isHost && (
+                <>
+                  {/* Record Button */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={isRecording ? 'destructive' : 'secondary'}
+                          size="lg"
+                          onClick={isRecording ? handleStopRecording : handleStartRecording}
+                          disabled={isLoading}
+                          className="h-10 px-3 flex-1"
+                        >
+                          {isRecording ? (
+                            <>
+                              <Pause className="h-4 w-4 mr-2" />
+                              Stop
+                            </>
+                          ) : (
+                            <>
+                              <Circle className="h-4 w-4 mr-2" />
+                              Record
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isRecording ? 'Stop Recording' : 'Start Recording'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  {/* Stream Button */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={isStreaming ? 'destructive' : 'secondary'}
+                          size="lg"
+                          onClick={() => isStreaming ? handleStopStreaming() : setShowStreamModal(true)}
+                          disabled={isLoading}
+                          className="h-10 px-3 flex-1"
+                        >
+                          {isStreaming ? (
+                            <>
+                              <Square className="h-4 w-4 mr-2" />
+                              End Stream
+                            </>
+                          ) : (
+                            <>
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Go Live
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isStreaming ? 'End Live Stream' : 'Start Live Stream'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
+            </div>
+
+            {/* Recording Indicator */}
+            {isRecording && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 animate-pulse">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-sm font-medium text-red-500">Recording</span>
+                <span className="text-xs text-red-400 font-mono">{formatTime(recordingTime)}</span>
+              </div>
+            )}
+
+            {/* Streaming Indicator */}
+            {isStreaming && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-sm font-medium text-blue-500">Live Streaming</span>
+                <span className="text-xs text-blue-400 font-mono">{formatTime(streamTime)}</span>
+              </div>
+            )}
+
+            {/* Recordings List */}
+            {recordings.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-white">Recordings</h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {recordings.map((recording) => (
+                    <div
+                      key={recording.id}
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-800 border border-slate-700"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Video className="h-4 w-4 text-amber-400" />
+                        <div>
+                          <p className="text-xs font-medium text-white truncate max-w-[150px]">
+                            {recording.title}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {formatTime(recording.duration)} • {recording.format.toUpperCase()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadRecording(recording.key)}
+                          className="h-7 w-7 p-0"
+                        >
+                          <Download className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteRecording(recording.key)}
+                          className="h-7 w-7 p-0 text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Stream Configuration Modal */}
       {showStreamModal && (
@@ -456,7 +553,7 @@ export function RecordingControls({ roomId, isHost }: RecordingControlsProps) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
