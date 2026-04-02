@@ -205,25 +205,25 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/auth/oauth', oauthRoutes);
 
 // Room routes
-app.use('/api/v1/rooms', AuthMiddleware.optional, roomRoutes);
+app.use('/api/v1/rooms', roomRoutes);
 
 // Meeting routes (NEW - Production Ready)
-app.use('/api/v1/meetings', AuthMiddleware.optional, meetingRoutes);
+app.use('/api/v1/meetings', meetingRoutes);
 
 // Recording routes (NEW - Phase 5)
-app.use('/api/v1/recordings', AuthMiddleware.optional, recordingRoutes);
+app.use('/api/v1/recordings', recordingRoutes);
 
 // Analytics routes (NEW - Phase 6)
-app.use('/api/v1/analytics', AuthMiddleware.optional, analyticsRoutes);
+app.use('/api/v1/analytics', analyticsRoutes);
 
 // AI routes (NEW - Phase 8: AI Integration)
-app.use('/api/v1/ai', AuthMiddleware.optional, aiRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // Chat routes
-app.use('/api/v1/chat', AuthMiddleware.optional, chatRoutes);
+app.use('/api/v1/chat', chatRoutes);
 
 // Engagement routes (Polls & Q&A)
-app.use('/api/v1', AuthMiddleware.optional, engagementRoutes);
+app.use('/api/v1', engagementRoutes);
 
 // Admin routes (must be after other routes)
 // app.use('/api/v1/admin', adminRoutes); // TODO: Enable after billing features complete

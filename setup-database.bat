@@ -1,85 +1,41 @@
 @echo off
-REM ========================================
-REM   VANTAGE - Database Setup Script
-REM ========================================
+REM PostgreSQL Database Setup for VANTAGE
+REM Run this file as Administrator
 
-echo.
-echo ========================================
-echo   Setting Up VANTAGE Database
-echo ========================================
+echo ============================================
+echo VANTAGE PostgreSQL Database Setup
+echo ============================================
 echo.
 
-REM Check if psql is available
-where psql >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ⚠ PostgreSQL is NOT installed or not in PATH
-    echo.
-    echo Please install PostgreSQL from:
-    echo   https://www.postgresql.org/download/windows/
-    echo.
-    echo Or use Docker:
-    echo   docker run -d -e POSTGRES_PASSWORD=password -p 5432:5432 postgres:15
-    echo.
-    pause
-    exit /b 1
-)
+cd "C:\Program Files\PostgreSQL\15\bin"
 
-echo [1/4] Creating database user...
-psql -U postgres -c "CREATE USER vantage WITH PASSWORD 'vantage_password';" 2>nul
-if %errorlevel% equ 0 (
-    echo ✓ User created
-) else (
-    echo ⚠ User might already exist (continuing...)
-)
+echo Step 1: Creating database 'vantage'...
+psql -U postgres -c "CREATE DATABASE vantage;" 2>nul || echo Database may already exist
 
-echo.
-echo [2/4] Creating database...
-psql -U postgres -c "CREATE DATABASE vantage OWNER vantage;" 2>nul
-if %errorlevel% equ 0 (
-    echo ✓ Database created
-) else (
-    echo ⚠ Database might already exist (continuing...)
-)
+echo Step 2: Creating user 'vantage'...
+psql -U postgres -c "CREATE USER vantage WITH PASSWORD 'vantage_dev_password_2026';" 2>nul || echo User may already exist
 
-echo.
-echo [3/4] Granting privileges...
+echo Step 3: Granting privileges...
 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE vantage TO vantage;" 2>nul
-echo ✓ Privileges granted
+
+echo Step 4: Setting schema permissions...
+psql -U postgres -d vantage -c "GRANT ALL ON SCHEMA public TO vantage;" 2>nul
 
 echo.
-echo [4/4] Running Prisma migrations...
-cd apps\api
-
-REM Check if .env.local exists
-if not exist .env.local (
-    echo ⚠ .env.local not found, creating...
-    copy ..\..\.env.example .env.local
-)
-
-REM Generate Prisma Client
+echo ============================================
+echo Database setup complete!
+echo ============================================
 echo.
-echo Generating Prisma Client...
-npx prisma generate
-
-REM Run migrations
+echo Connection details:
+echo   Host: localhost
+echo   Port: 5432
+echo   Database: vantage
+echo   User: vantage
+echo   Password: vantage_dev_password_2026
 echo.
-echo Running database migrations...
-npx prisma migrate dev --name init
-
+echo Next steps:
+echo 1. Update .env.local with DATABASE_URL
+echo 2. Run: npx prisma migrate dev
+echo 3. Run: npx prisma generate
 echo.
-echo ========================================
-echo   Database Setup Complete!
-echo ========================================
-echo.
-echo Database: vantage
-echo Username: vantage
-echo Password: vantage_password
-echo.
-echo You can now start the API server:
-echo   npm run dev
-echo.
-echo ========================================
-echo.
-
-cd ..\..
 pause

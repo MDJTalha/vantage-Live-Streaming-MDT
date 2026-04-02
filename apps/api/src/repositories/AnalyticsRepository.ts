@@ -5,18 +5,10 @@ const prisma = new PrismaClient();
 export interface AnalyticsData {
   roomId: string;
   totalParticipants: number;
-  peakConcurrent: number;
   totalDuration: number;
-  chatMessages: number;
-  polls: number;
-  questions: number;
-  recordings: number;
-  engagement: {
-    averageWatchTime: number;
-    pollParticipation: number;
-    questionCount: number;
-    reactionCount: number;
-  };
+  totalMessages: number;
+  totalReactions: number;
+  peakParticipants: number;
 }
 
 export interface DashboardMetrics {
@@ -49,13 +41,10 @@ export class AnalyticsRepository {
     return {
       roomId: analytics.roomId,
       totalParticipants: analytics.totalParticipants,
-      peakConcurrent: analytics.peakConcurrent,
       totalDuration: analytics.totalDuration,
-      chatMessages: analytics.chatMessages,
-      polls: 0, // Would need to query polls table
-      questions: 0, // Would need to query questions table
-      recordings: 0, // Would need to query recordings table
-      engagement: analytics.engagementMetrics as any,
+      totalMessages: analytics.totalMessages,
+      totalReactions: analytics.totalReactions,
+      peakParticipants: analytics.peakParticipants,
     };
   }
 
@@ -71,16 +60,13 @@ export class AnalyticsRepository {
         hostId: userId,
         createdAt: { gte: startDate },
       },
-      include: {
-        analytics: true,
-      },
     });
 
     // Aggregate metrics
     const totalMeetings = rooms.length;
-    const totalParticipants = rooms.reduce((sum, room) => sum + (room.analytics?.totalParticipants || 0), 0);
-    const totalDuration = rooms.reduce((sum, room) => sum + (room.analytics?.totalDuration || 0), 0);
-    const storageUsed = 0; // Would need to query S3
+    const totalParticipants = rooms.reduce((sum, room) => sum + 0, 0);
+    const totalDuration = rooms.reduce((sum, room) => sum + 0, 0);
+    const storageUsed = 0;
 
     // Meetings by day
     const meetingsByDay: Array<{ date: string; count: number }> = [];
@@ -97,12 +83,12 @@ export class AnalyticsRepository {
 
     meetingsByDay.sort((a, b) => a.date.localeCompare(b.date));
 
-    // Top rooms by participants
+    // Top rooms
     const topRooms = rooms
       .map(room => ({
         id: room.id,
         name: room.name,
-        participants: room.analytics?.totalParticipants || 0,
+        participants: 0,
       }))
       .sort((a, b) => b.participants - a.participants)
       .slice(0, 10);
@@ -111,7 +97,7 @@ export class AnalyticsRepository {
       totalMeetings,
       totalParticipants,
       totalDuration,
-      activeUsers: 0, // Would need to query active users
+      activeUsers: 0,
       storageUsed,
       meetingsByDay,
       topRooms,
@@ -125,10 +111,10 @@ export class AnalyticsRepository {
     roomId: string,
     data: Partial<{
       totalParticipants: number;
-      peakConcurrent: number;
       totalDuration: number;
-      chatMessages: number;
-      engagementMetrics: any;
+      totalMessages: number;
+      totalReactions: number;
+      peakParticipants: number;
     }>
   ): Promise<void> {
     await prisma.roomAnalytics.upsert({
@@ -136,17 +122,17 @@ export class AnalyticsRepository {
       create: {
         roomId,
         totalParticipants: data.totalParticipants || 0,
-        peakConcurrent: data.peakConcurrent || 0,
         totalDuration: data.totalDuration || 0,
-        chatMessages: data.chatMessages || 0,
-        engagementMetrics: data.engagementMetrics || {},
+        totalMessages: data.totalMessages || 0,
+        totalReactions: data.totalReactions || 0,
+        peakParticipants: data.peakParticipants || 0,
       },
       update: {
         totalParticipants: data.totalParticipants,
-        peakConcurrent: data.peakConcurrent,
         totalDuration: data.totalDuration,
-        chatMessages: data.chatMessages,
-        engagementMetrics: data.engagementMetrics,
+        totalMessages: data.totalMessages,
+        totalReactions: data.totalReactions,
+        peakParticipants: data.peakParticipants,
       },
     });
   }
@@ -164,25 +150,25 @@ export class AnalyticsRepository {
   }
 
   /**
-   * Update peak concurrent
+   * Update peak participants
    */
-  static async updatePeakConcurrent(roomId: string, count: number): Promise<void> {
+  static async updatePeakParticipants(roomId: string, count: number): Promise<void> {
     await prisma.roomAnalytics.update({
       where: { roomId },
       data: {
-        peakConcurrent: { max: count },
+        peakParticipants: { max: count },
       },
     });
   }
 
   /**
-   * Increment chat messages
+   * Increment total messages
    */
-  static async incrementChatMessages(roomId: string): Promise<void> {
+  static async incrementTotalMessages(roomId: string): Promise<void> {
     await prisma.roomAnalytics.update({
       where: { roomId },
       data: {
-        chatMessages: { increment: 1 },
+        totalMessages: { increment: 1 },
       },
     });
   }

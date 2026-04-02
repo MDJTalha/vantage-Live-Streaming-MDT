@@ -1,4 +1,4 @@
-import { PrismaClient, MessageType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -8,8 +8,7 @@ export interface ChatMessage {
   userId?: string;
   guestName?: string;
   content: string;
-  messageType: MessageType;
-  reactions: any[];
+  type: string;
   parentId?: string;
   createdAt: Date;
   user?: {
@@ -32,7 +31,7 @@ export class ChatRepository {
     userId?: string;
     guestName?: string;
     content: string;
-    messageType?: MessageType;
+    type?: string;
     parentId?: string;
   }): Promise<ChatMessage> {
     return prisma.chatMessage.create({
@@ -41,7 +40,7 @@ export class ChatRepository {
         userId: data.userId,
         guestName: data.guestName,
         content: data.content,
-        messageType: data.messageType || 'TEXT',
+        type: data.type || 'TEXT',
         parentId: data.parentId,
       },
       include: {
@@ -129,44 +128,6 @@ export class ChatRepository {
         },
       },
     });
-  }
-
-  /**
-   * Update message reactions
-   */
-  static async updateReactions(messageId: string, reactions: any[]): Promise<ChatMessage> {
-    return prisma.chatMessage.update({
-      where: { id: messageId },
-      data: { reactions },
-    });
-  }
-
-  /**
-   * Add reaction to message
-   */
-  static async addReaction(messageId: string, userId: string, emoji: string): Promise<ChatMessage> {
-    const message = await this.getById(messageId);
-    
-    if (!message) {
-      throw new Error('Message not found');
-    }
-
-    const reactions = message.reactions as any[] || [];
-    
-    // Check if user already reacted with this emoji
-    const existingIndex = reactions.findIndex(
-      (r) => r.userId === userId && r.emoji === emoji
-    );
-
-    if (existingIndex >= 0) {
-      // Remove reaction (toggle off)
-      reactions.splice(existingIndex, 1);
-    } else {
-      // Add reaction
-      reactions.push({ userId, emoji, timestamp: new Date() });
-    }
-
-    return this.updateReactions(messageId, reactions);
   }
 
   /**
