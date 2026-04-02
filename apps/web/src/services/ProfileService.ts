@@ -13,11 +13,21 @@ export interface UserProfile {
   role: string;
   emailVerified: boolean;
   createdAt: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  company?: string;
+  website?: string;
 }
 
 export interface UpdateProfileRequest {
   name?: string;
   avatarUrl?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  company?: string;
+  website?: string;
 }
 
 export interface ChangePasswordRequest {

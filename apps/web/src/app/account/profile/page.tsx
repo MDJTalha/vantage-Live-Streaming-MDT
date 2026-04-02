@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Badge } from '@vantage/ui';
@@ -20,14 +20,12 @@ import {
   Activity,
   Trash2,
   Download,
-  Clock,
   Video,
   FileText,
   Monitor,
   Globe,
   Smartphone,
   X,
-  Copy,
   Edit2,
   Save,
   Upload,
@@ -59,7 +57,7 @@ interface Session {
 
 export default function ProfileManagement() {
   const router = useRouter();
-  const { logout, user: authUser } = useAuth();
+  const { logout } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Profile state
@@ -117,6 +115,7 @@ export default function ProfileManagement() {
       }, 5000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [success, error, info]);
 
   useEffect(() => {
@@ -175,7 +174,7 @@ export default function ProfileManagement() {
     setSessions(mockSessions);
   }
 
-  function loadRecentActivity(userData: UserProfile) {
+  function loadRecentActivity(_userData: UserProfile) {
     const activities: RecentActivity[] = [
       {
         id: '1',

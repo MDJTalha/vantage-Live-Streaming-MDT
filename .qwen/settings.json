@@ -19,7 +19,8 @@
       "Bash(c:\\node20\\node.exe *)",
       "Bash(ping *)",
       "Bash(type *)",
-      "Bash(select-object *)"
+      "Bash(select-object *)",
+      "Bash(select-string *)"
     ]
   },
   "$version": 3

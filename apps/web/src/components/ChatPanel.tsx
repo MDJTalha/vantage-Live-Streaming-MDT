@@ -2,14 +2,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '@/contexts/ChatContext';
-import { 
-  Send, 
-  Users, 
-  MessageSquare, 
-  X, 
-  Minimize2, 
+import {
+  Send,
+  Users,
+  MessageSquare,
+  X,
+  Minimize2,
   Maximize2,
-  Broadcast,
   User,
   Check,
   CheckCheck,
@@ -130,7 +129,7 @@ export default function ChatPanel({ isOpen, onClose }: ChatPanelProps) {
                     : 'bg-blue-500/10 text-blue-300 hover:bg-blue-500/20'
                 }`}
               >
-                <Broadcast className="h-3 w-3" />
+                <Users className="h-3 w-3" />
                 All
               </button>
               {users.map(user => (

@@ -265,7 +265,7 @@ export default function PremiumMeetingRoom() {
         console.error('Screen share failed:', err);
       }
     }
-  };
+  }, [isScreenSharing, localStream]);
 
   const toggleHand = () => {
     setIsHandRaised(!isHandRaised);

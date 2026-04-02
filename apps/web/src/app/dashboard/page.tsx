@@ -7,7 +7,7 @@ import {
   Video, Calendar, Clock, Users, Play, Shield, Lock, Bell, Search, Settings, LogOut,
   ChevronRight, Plus, Copy, MoreVertical, Edit2, Trash2, X, Mic, FolderOpen,
   BarChart3, CheckCircle2, Sparkles, Brain, Zap, TrendingUp, Award, Target,
-  FileText, MessageSquare, Star, AlertCircle, RefreshCw, ArrowRight
+  FileText, MessageSquare, AlertCircle, RefreshCw, ArrowRight
 } from 'lucide-react';
 
 interface Room {
@@ -65,7 +65,11 @@ export default function Dashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const userRooms = await meetingService.getAllMeetings(user?.id);
+      if (!user?.id) {
+        setError('User not authenticated');
+        return;
+      }
+      const userRooms = await meetingService.getAllMeetings(user.id);
       setRooms(userRooms);
     } catch (error: any) {
       setError(error.message || 'Failed to load meetings.');

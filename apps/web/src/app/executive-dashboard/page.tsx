@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Video, Calendar, Clock, Users, Play, Shield, Lock, Bell, LogOut, ChevronRight, Briefcase, DollarSign, Building2, Star } from 'lucide-react';
+import { Video, Calendar, Users, Play, Shield, Lock, Bell, LogOut, ChevronRight, Briefcase, DollarSign, Building2 } from 'lucide-react';
 
 interface Meeting {
   id: string;
