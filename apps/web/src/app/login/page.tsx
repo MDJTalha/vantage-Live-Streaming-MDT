@@ -115,62 +115,24 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
-        'host@vantage.live': {
-          password: '@host@123#',
-          user: { id: '2', email: 'host@vantage.live', name: 'Demo Host', role: 'HOST' }
-        },
-        'user@vantage.live': {
-          password: '@user@123#',
-          user: { id: '3', email: 'user@vantage.live', name: 'Demo User', role: 'PARTICIPANT' }
-        }
-      };
 
-      let userData;
-      const demoUser = demoUsers[email.toLowerCase()];
+  const handleQuickLogin = async (email: string, password: string) => {
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
 
-      if (demoUser && demoUser.password === password) {
-        // Demo user matched
-        userData = demoUser.user;
+    try {
+      const result = await login(email, password);
+
+      if (result.success) {
+        setSuccess('Login successful! Redirecting...');
       } else {
-        // Check registered users from localStorage
-        const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-        const registeredUser = registeredUsers.find((u: any) => u.email === email && u.password === password);
-
-        if (registeredUser) {
-          userData = {
-            id: registeredUser.id || 'demo-user-' + Date.now(),
-            email: registeredUser.email,
-            name: registeredUser.name,
-            role: registeredUser.role || 'USER'
-          };
-        } else {
-          // Allow any email/password combo in demo mode
-          userData = {
-            id: 'demo-' + Date.now(),
-            email: email,
-            name: email.split('@')[0],
-            role: 'USER'
-          };
-        }
+        setError(result.error || 'Login failed. Please check your credentials.');
       }
-
-      const mockTokens = {
-        accessToken: 'demo-access-token-' + Date.now(),
-        refreshToken: 'demo-refresh-token-' + Date.now()
-      };
-
-      localStorage.setItem('accessToken', mockTokens.accessToken);
-      localStorage.setItem('refreshToken', mockTokens.refreshToken);
-      localStorage.setItem('demoUser', JSON.stringify(userData));
-
-      setSuccess('Login successful! Redirecting...');
-
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 800);
-
-    } catch (err: any) {
-      setError(err.message || 'Invalid credentials. Please try again.');
+    } catch (error: any) {
+      console.error('Quick login error:', error);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
       setIsLoading(false);
     }
   };

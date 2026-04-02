@@ -897,4 +897,4 @@ const meetingService = {
 
 // Import actual components
 import ChatButton from '@/components/ChatButton';
-import { Briefcase, DollarSign, Award } from 'lucide-react';
+import { Briefcase, DollarSign } from 'lucide-react';
