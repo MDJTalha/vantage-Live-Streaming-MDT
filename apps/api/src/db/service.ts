@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { IncludePatterns, getPaginationParams, getPaginationMeta, QueryMonitor, batchFetch, mapResults } from '../utils/database';
-import { Logger } from '../utils/errors';
+import { PrismaClient, Role, RoomStatus, RoomRole, RecordingStatus } from '@prisma/client';
+import { IncludePatterns, QueryMonitor } from '../utils/database';
 
 const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
@@ -51,20 +50,23 @@ export class DatabaseService {
     email: string;
     passwordHash: string;
     name: string;
-    role?: string;
+    role?: Role;
   }) {
     return prisma.user.create({
-      data,
+      data: {
+        ...data,
+        role: data.role || 'USER',
+      },
     });
   }
 
   /**
-   * Get room by room code (optimized - prevents N+1 for participants)
+   * Get room by code (optimized - prevents N+1 for participants)
    */
-  static async getRoomByCode(roomCode: string) {
+  static async getRoomByCode(code: string) {
     return QueryMonitor.monitor('getRoomByCode', () =>
       prisma.room.findUnique({
-        where: { roomCode },
+        where: { code },
         select: {
           ...IncludePatterns.room.basic,
           host: {
@@ -124,17 +126,19 @@ export class DatabaseService {
    * Create a new room
    */
   static async createRoom(data: {
-    roomCode: string;
+    code: string;
     name: string;
     description?: string;
     hostId: string;
-    settings?: any;
-    passwordHash?: string;
+    password?: string;
   }) {
     return prisma.room.create({
       data: {
-        ...data,
-        settings: data.settings || {},
+        code: data.code,
+        name: data.name,
+        hostId: data.hostId,
+        password: data.password || null,
+        status: 'SCHEDULED',
       },
       include: {
         host: {
@@ -151,7 +155,7 @@ export class DatabaseService {
   /**
    * Update room status
    */
-  static async updateRoomStatus(roomId: string, status: string) {
+  static async updateRoomStatus(roomId: string, status: RoomStatus) {
     return prisma.room.update({
       where: { id: roomId },
       data: {
@@ -167,14 +171,14 @@ export class DatabaseService {
    */
   static async addParticipant(roomId: string, data: {
     userId?: string;
-    guestName?: string;
-    guestEmail?: string;
-    role?: string;
+    name: string;
+    role?: RoomRole;
   }) {
     return prisma.roomParticipant.create({
       data: {
         roomId,
-        ...data,
+        userId: data.userId,
+        name: data.name,
         role: data.role || 'PARTICIPANT',
       },
       include: {
@@ -198,8 +202,8 @@ export class DatabaseService {
       data: {
         leftAt: new Date(),
         isSpeaking: false,
-        isVideoEnabled: false,
-        isAudioEnabled: false,
+        isVideoOff: true,
+        isMuted: true,
       },
     });
   }
@@ -289,13 +293,22 @@ export class DatabaseService {
   static async createSession(data: {
     userId: string;
     tokenHash: string;
+    refreshToken: string;
     refreshTokenHash: string;
     expiresAt: Date;
     userAgent?: string;
     ipAddress?: string;
   }) {
     return prisma.session.create({
-      data,
+      data: {
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        refreshToken: data.refreshToken,
+        refreshTokenHash: data.refreshTokenHash,
+        expiresAt: data.expiresAt,
+        userAgent: data.userAgent,
+        ipAddress: data.ipAddress,
+      },
     });
   }
 
@@ -354,13 +367,18 @@ export class DatabaseService {
    */
   static async createPoll(data: {
     roomId: string;
-    question: string;
+    title: string;
     options: any;
-    multipleChoice: boolean;
-    createdBy: string;
+    allowMultiple?: boolean;
   }) {
     return prisma.poll.create({
-      data,
+      data: {
+        roomId: data.roomId,
+        title: data.title,
+        options: data.options,
+        allowMultiple: data.allowMultiple || false,
+        status: 'ACTIVE',
+      },
     });
   }
 
@@ -368,14 +386,14 @@ export class DatabaseService {
    * Vote on poll
    */
   static async voteOnPoll(pollId: string, data: {
-    optionId: string;
+    optionIndex: number;
     userId?: string;
-    guestId?: string;
   }) {
     return prisma.pollVote.create({
       data: {
         pollId,
-        ...data,
+        optionIndex: data.optionIndex,
+        userId: data.userId,
       },
     });
   }
@@ -388,12 +406,6 @@ export class DatabaseService {
       where: { id: pollId },
       include: {
         votes: true,
-        creator: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
       },
     });
   }
@@ -403,24 +415,34 @@ export class DatabaseService {
    */
   static async createRecording(data: {
     roomId: string;
+    userId: string;
+    title: string;
     url: string;
     duration: number;
-    sizeBytes?: bigint;
+    size: number;
   }) {
     return prisma.recording.create({
-      data,
+      data: {
+        roomId: data.roomId,
+        userId: data.userId,
+        title: data.title,
+        url: data.url,
+        duration: data.duration,
+        size: data.size,
+        status: 'PROCESSING',
+      },
     });
   }
 
   /**
    * Update recording status
    */
-  static async updateRecordingStatus(recordingId: string, status: string) {
+  static async updateRecordingStatus(recordingId: string, status: RecordingStatus) {
     return prisma.recording.update({
       where: { id: recordingId },
       data: {
         status,
-        completedAt: status === 'COMPLETED' ? new Date() : undefined,
+        processedAt: status === 'READY' ? new Date() : undefined,
       },
     });
   }
@@ -430,16 +452,7 @@ export class DatabaseService {
    */
   static async getUserRooms(userId: string) {
     return prisma.room.findMany({
-      where: {
-        OR: [
-          { hostId: userId },
-          {
-            participants: {
-              some: { userId },
-            },
-          },
-        ],
-      },
+      where: { hostId: userId },
       include: {
         host: {
           select: {
@@ -472,20 +485,6 @@ export class DatabaseService {
         },
         participants: {
           where: { leftAt: null },
-        },
-      },
-    });
-  }
-
-  /**
-   * Increment analytics
-   */
-  static async incrementAnalytics(roomId: string, field: string, by: number = 1) {
-    return prisma.roomAnalytics.update({
-      where: { roomId },
-      data: {
-        [field]: {
-          increment: by,
         },
       },
     });

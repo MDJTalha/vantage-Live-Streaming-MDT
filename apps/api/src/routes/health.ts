@@ -39,10 +39,9 @@ async function checkRedis(): Promise<boolean> {
 
 async function checkMediaServer(): Promise<boolean> {
   try {
-    const response = await fetch(`http://${config.mediaServerHost}:${config.mediaServerPort}/health`, {
+    const response = await fetch(`http://${config.mediaServer.host}:${config.mediaServer.port}/health`, {
       method: 'GET',
-      timeout: 2000,
-    });
+    } as RequestInit);
     return response.ok;
   } catch (error) {
     console.error('Media server health check failed:', error);

@@ -3,7 +3,13 @@ import { AuthService, TokenPayload } from '../services/AuthService';
 import DatabaseService from '../db/service';
 
 export interface AuthRequest extends Request {
-  user?: TokenPayload;
+  user?: {
+    userId: string;
+    email: string;
+    role: string;
+    id?: string;
+    name?: string;
+  };
 }
 
 /**
@@ -85,7 +91,7 @@ export class AuthMiddleware {
    */
   static async optional(
     req: AuthRequest,
-    res: Response,
+    _res: Response,
     next: NextFunction
   ): Promise<void> {
     try {
@@ -147,6 +153,11 @@ export class AuthMiddleware {
    * Require admin role
    */
   static requireAdmin = AuthMiddleware.requireRole('ADMIN');
+
+  /**
+   * Require authentication (alias for protect)
+   */
+  static requireAuth = AuthMiddleware.protect;
 }
 
 export default AuthMiddleware;

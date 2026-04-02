@@ -1,10 +1,27 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import prisma from '../db/prisma';
 import { config } from '@vantage/config';
 
 const router = Router();
+
+// Token generation helper
+const generateTokens = (userId: string, email: string) => {
+  const accessToken = jwt.sign(
+    { userId, email },
+    config.auth.jwtSecret,
+    { expiresIn: config.auth.jwtExpiresIn || '7d' } as SignOptions
+  );
+
+  const refreshToken = jwt.sign(
+    { userId },
+    config.auth.jwtSecret,
+    { expiresIn: '30d' } as SignOptions
+  );
+
+  return { accessToken, refreshToken };
+};
 
 // ==================== REGISTER ====================
 router.post('/register', async (req: Request, res: Response) => {
@@ -42,7 +59,7 @@ router.post('/register', async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: {
         email: email.toLowerCase(),
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         name,
         role: 'USER',
         emailVerified: false,
@@ -50,17 +67,7 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     // Generate tokens
-    const accessToken = jwt.sign(
-      { userId: user.id, email: user.email },
-      config.auth.jwtSecret,
-      { expiresIn: config.auth.jwtExpiresIn || '7d' }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId: user.id },
-      config.auth.jwtSecret,
-      { expiresIn: '30d' }
-    );
+    const { accessToken, refreshToken } = generateTokens(user.id, user.email);
 
     // Save refresh token
     await prisma.user.update({
@@ -68,8 +75,8 @@ router.post('/register', async (req: Request, res: Response) => {
       data: { refreshToken }
     });
 
-    // Return user data (without password)
-    const { password: _, ...userWithoutPassword } = user;
+    // Return user data (without passwordHash)
+    const { passwordHash: _, ...userWithoutPassword } = user;
 
     res.status(201).json({
       user: userWithoutPassword,
@@ -106,26 +113,16 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!isValidPassword) {
-      return res.status(401).json({ 
-        error: 'Invalid email or password' 
+      return res.status(401).json({
+        error: 'Invalid email or password'
       });
     }
 
     // Generate tokens
-    const accessToken = jwt.sign(
-      { userId: user.id, email: user.email },
-      config.auth.jwtSecret,
-      { expiresIn: config.auth.jwtExpiresIn || '7d' }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId: user.id },
-      config.auth.jwtSecret,
-      { expiresIn: '30d' }
-    );
+    const { accessToken, refreshToken } = generateTokens(user.id, user.email);
 
     // Update user
     await prisma.user.update({
@@ -136,8 +133,8 @@ router.post('/login', async (req: Request, res: Response) => {
       }
     });
 
-    // Return user data (without password)
-    const { password: _, ...userWithoutPassword } = user;
+    // Return user data (without passwordHash)
+    const { passwordHash: _, ...userWithoutPassword } = user;
 
     res.json({
       user: userWithoutPassword,
@@ -172,11 +169,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
 
     // Generate new access token
-    const accessToken = jwt.sign(
-      { userId: user.id, email: user.email },
-      config.auth.jwtSecret,
-      { expiresIn: config.auth.jwtExpiresIn || '7d' }
-    );
+    const { accessToken } = generateTokens(user.id, user.email);
 
     res.json({ accessToken });
   } catch (error: any) {
@@ -290,7 +283,7 @@ router.post('/change-password', async (req: Request, res: Response) => {
     }
 
     // Verify current password
-    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
 
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Current password is incorrect' });
@@ -302,7 +295,7 @@ router.post('/change-password', async (req: Request, res: Response) => {
     // Update password
     await prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword }
+      data: { passwordHash: hashedPassword }
     });
 
     res.json({ success: true });

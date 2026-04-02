@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { requireAuth } from '../middleware/auth';
-import BillingService from '../services/BillingService';
+import AuthMiddleware from '../middleware/auth';
+// import BillingService from '../services/BillingService';
 import { sendEmail } from '../utils/email';
 import { validateEmail, normalizeSlug } from '../utils/validation';
 
 const router = Router();
 const prisma = new PrismaClient();
-const billingService = new BillingService();
+// const billingService = new BillingService();
+const requireAuth = AuthMiddleware.requireAuth;
 
 /**
  * POST /api/v1/onboarding/create-organization

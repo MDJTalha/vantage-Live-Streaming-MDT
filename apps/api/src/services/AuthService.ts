@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
@@ -6,7 +6,6 @@ import { config } from '@vantage/config';
 
 const JWT_SECRET = config.auth.jwtSecret;
 const JWT_EXPIRES_IN = config.auth.jwtExpiresIn;
-const REFRESH_TOKEN_EXPIRES_IN = config.auth.refreshTokenExpiresIn;
 const ENCRYPTION_KEY = config.security.encryptionKey;
 
 /**
@@ -195,13 +194,16 @@ export interface SessionData {
  * Handles JWT, password hashing, and session management
  */
 export class AuthService {
+  // Expose ConfigurationValidator as static property
+  static ConfigurationValidator = ConfigurationValidator;
+
   /**
    * Generate JWT access token
    */
   static generateAccessToken(payload: TokenPayload): string {
     return jwt.sign(payload, JWT_SECRET, {
       expiresIn: JWT_EXPIRES_IN,
-    });
+    } as SignOptions);
   }
 
   /**

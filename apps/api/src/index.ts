@@ -22,7 +22,8 @@ import DatabaseService from './db/service';
 import requestIdMiddleware from './middleware/requestId';
 import { errorHandler } from './utils/errors';
 import { MetricsService } from './services/MetricsService';
-import { logger } from './utils/logger';
+import { AuthService } from './services/AuthService';
+import { logger, httpLogger } from './utils/logger';
 
 const app: Express = express();
 const PORT = config.api.port || 4000;
@@ -33,17 +34,17 @@ const PORT = config.api.port || 4000;
 if (config.environment !== 'test') {
   console.log('🔐 Validating security configuration...');
   const validation = AuthService.ConfigurationValidator.validateAll();
-  
+
   if (!validation.valid) {
     console.error('\n❌ CRITICAL SECURITY CONFIGURATION ERRORS:\n');
-    validation.errors.forEach(error => console.error(`   • ${error}`));
+    validation.errors.forEach((error: string) => console.error(`   • ${error}`));
     console.error('\n📝 Please update your .env.local file with secure values.\n');
     console.error('💡 Generate secure secrets with:\n');
     console.error('   JWT_SECRET: openssl rand -base64 32');
     console.error('   ENCRYPTION_KEY: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"\n');
     process.exit(1);
   }
-  
+
   console.log('✓ Security configuration validated');
   console.log('✓ JWT Secret: Configured (32+ characters)');
   console.log('✓ Encryption Key: Configured (64 hex characters)');
@@ -151,7 +152,7 @@ app.use('/api/v1/auth/', RateLimiter.strict());
 // ============================================
 // Health Check & Metrics Endpoints
 // ============================================
-app.get('/metrics', async (req: Request, res: Response) => {
+app.get('/metrics', async (_req: Request, res: Response) => {
   try {
     const metrics = await MetricsService.getMetrics();
     res.set('Content-Type', 'text/plain');
@@ -165,7 +166,7 @@ app.get('/metrics', async (req: Request, res: Response) => {
 app.use('/health', healthRoutes);
 
 // Original health endpoint (deprecated, kept for backward compatibility)
-app.get('/health/legacy', async (req: Request, res: Response) => {
+app.get('/health/legacy', async (_req: Request, res: Response) => {
   const dbHealthy = await DatabaseService.healthCheck();
 
   res.json({
@@ -184,7 +185,7 @@ app.get('/health/legacy', async (req: Request, res: Response) => {
 // ============================================
 
 // Root API endpoint
-app.get('/api/v1', (req: Request, res: Response) => {
+app.get('/api/v1', (_req: Request, res: Response) => {
   res.json({
     name: 'VANTAGE API',
     version: config.appVersion,

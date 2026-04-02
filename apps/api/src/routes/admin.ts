@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../db';
 import { AuthMiddleware } from '../middleware/auth';
-import { BillingService } from '../services/BillingService';
+// import { BillingService } from '../services/BillingService';
 // import { sendEmail, generatePasswordResetEmail } from '../utils/email';
 import { sendEmail } from '../utils/email';
 
 const router = Router();
-const billingService = new BillingService();
+// const billingService = new BillingService();
 
 // ============================================
 // Organization Management
