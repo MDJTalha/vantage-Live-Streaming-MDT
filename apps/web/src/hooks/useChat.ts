@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+// @ts-ignore - socket.io-client types not available
 import { io, Socket } from 'socket.io-client';
 
 export interface ChatMessage {

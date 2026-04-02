@@ -112,7 +112,7 @@ export default function PremiumMeetingRoom() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleAudio, toggleVideo, toggleScreenShare, toggleFullscreen]); // Dependencies for callbacks
+  }, []); // Empty dependencies - functions defined later
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);

@@ -109,7 +109,7 @@ class MeetingService {
     }
   }
 
-  async createMeeting(data: {
+  async createMeeting(_data: {
     name: string;
     scheduledAt?: string;
     duration?: number;
@@ -121,28 +121,28 @@ class MeetingService {
     enableWaitingRoom?: boolean;
   }): Promise<Meeting | null> {
     try {
-      const response = await fetch(`${this.apiUrl}/api/v1/meetings`, {
+      const response: Response = await fetch(`${this.apiUrl}/api/v1/meetings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(_data)
       });
 
       if (!response.ok) {
         throw new Error('Failed to create meeting');
       }
 
-      const data = await response.json();
-      return data;
+      const responseData = await response.json();
+      return responseData;
     } catch (error) {
       console.error('Error creating meeting:', error);
       return null;
     }
   }
 
-  async updateMeeting(code: string, data: Partial<Meeting>): Promise<Meeting | null> {
+  async updateMeeting(code: string, _data: Partial<Meeting>): Promise<Meeting | null> {
     try {
       const response = await fetch(`${this.apiUrl}/api/v1/meetings/${code}`, {
         method: 'PATCH',
@@ -150,15 +150,15 @@ class MeetingService {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(_data)
       });
 
       if (!response.ok) {
         return null;
       }
 
-      const data = await response.json();
-      return data;
+      const responseData = await response.json();
+      return responseData;
     } catch (error) {
       console.error('Error updating meeting:', error);
       return null;

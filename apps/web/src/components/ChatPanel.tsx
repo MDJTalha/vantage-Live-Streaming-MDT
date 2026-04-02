@@ -21,13 +21,12 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({ isOpen, onClose }: ChatPanelProps) {
-  const { 
-    isConnected, 
-    messages, 
-    users, 
-    sendMessage, 
+  const {
+    isConnected,
+    messages,
+    users,
+    sendMessage,
     sendBroadcastMessage,
-    rooms,
     selectedRoom,
     selectRoom,
     currentUserId,

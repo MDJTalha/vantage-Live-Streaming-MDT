@@ -116,26 +116,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = async (email: string, password: string) => {
-    setIsLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const result = await login(email, password);
-
-      if (result.success) {
-        setSuccess('Login successful! Redirecting...');
-      } else {
-        setError(result.error || 'Login failed. Please check your credentials.');
-      }
-    } catch (error: any) {
-      console.error('Quick login error:', error);
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Quick login handler removed - using direct login instead
 
   if (!mounted) {
     return (

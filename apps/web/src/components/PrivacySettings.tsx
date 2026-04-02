@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button, Badge } from '@vantage/ui';
+import { Button } from '@vantage/ui';
 import { CheckCircle, AlertCircle, Download, Trash2, Loader2 } from 'lucide-react';
 
 interface Consent {

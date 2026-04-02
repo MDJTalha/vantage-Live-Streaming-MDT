@@ -80,7 +80,11 @@ export default function Dashboard() {
 
   async function loadStats() {
     try {
-      const stats = await meetingService.getStatistics(user?.id);
+      if (!user?.id) {
+        console.error('User not authenticated');
+        return;
+      }
+      const stats = await meetingService.getStatistics(user.id);
       setStats(stats);
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -134,7 +138,6 @@ export default function Dashboard() {
   if (!user) return null;
 
   const liveMeeting = rooms.find(m => m.status === 'active');
-  const upcomingMeetings = rooms.filter(m => m.status === 'scheduled');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -886,8 +889,8 @@ function EditMeetingModal({ room, onClose, onSave }: any) {
 
 // Mock service for demo
 const meetingService = {
-  getAllMeetings: async (userId: string) => [],
-  getStatistics: async (userId: string) => ({
+  getAllMeetings: async (_userId: string) => [],
+  getStatistics: async (_userId: string) => ({
     totalMeetings: 0,
     activeMeetings: 0,
     scheduledMeetings: 0,
@@ -895,8 +898,8 @@ const meetingService = {
     totalRecordings: 0,
     storageUsed: 0,
   }),
-  deleteMeeting: async (code: string) => true,
-  updateMeeting: async (code: string, data: any) => true,
+  deleteMeeting: async (_code: string) => true,
+  updateMeeting: async (_code: string, _data: any) => true,
 };
 
 // Import actual components
