@@ -33,9 +33,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // Check for stored user first
+    const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('accessToken');
-    
-    if (token) {
+
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setIsLoading(false);
+      } catch {
+        localStorage.removeItem('user');
+        if (token) {
+          fetchUser(token);
+        } else {
+          setIsLoading(false);
+        }
+      }
+    } else if (token) {
       fetchUser(token);
     } else {
       setIsLoading(false);
@@ -54,16 +69,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData);
+        // Handle both { success: true, data: {...} } and direct object responses
+        const user = userData.success ? (userData.data || userData) : userData;
+        setUser(user);
+        localStorage.setItem('user', JSON.stringify(user));
       } else {
         // Token invalid, clear it
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
         setUser(null);
       }
     } catch (error) {
       console.error('Error fetching user:', error);
-      setUser(null);
+      // If API is unavailable, check for stored user
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -82,16 +111,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
 
       if (response.ok) {
+        // Handle both { user, accessToken, refreshToken } and { data: { user, tokens } } formats
+        const user = data.user || (data.data && data.data.user);
+        const accessToken = data.accessToken || (data.data && data.data.tokens && data.data.tokens.accessToken);
+        const refreshToken = data.refreshToken || (data.data && data.data.tokens && data.data.tokens.refreshToken);
+
+        if (!user || !accessToken) {
+          return { success: false, error: 'Invalid response from server' };
+        }
+
         // Save tokens
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
-        
-        // Set user
-        setUser(data.user);
-        
+        localStorage.setItem('accessToken', accessToken);
+        if (refreshToken) {
+          localStorage.setItem('refreshToken', refreshToken);
+        }
+
+        // Save user
+        setUser(user);
+        localStorage.setItem('user', JSON.stringify(user));
+
         // Redirect to dashboard
         router.push('/dashboard');
-        
+
         return { success: true };
       } else {
         return { success: false, error: data.error || 'Login failed' };
@@ -115,16 +156,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
 
       if (response.ok) {
+        // Handle both response formats
+        const user = data.user || (data.data && data.data.user);
+        const accessToken = data.accessToken || (data.data && data.data.tokens && data.data.tokens.accessToken);
+        const refreshToken = data.refreshToken || (data.data && data.data.tokens && data.data.tokens.refreshToken);
+
+        if (!user || !accessToken) {
+          return { success: false, error: 'Invalid response from server' };
+        }
+
         // Save tokens
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
-        
-        // Set user
-        setUser(data.user);
-        
+        localStorage.setItem('accessToken', accessToken);
+        if (refreshToken) {
+          localStorage.setItem('refreshToken', refreshToken);
+        }
+
+        // Save user
+        setUser(user);
+        localStorage.setItem('user', JSON.stringify(user));
+
         // Redirect to dashboard
         router.push('/dashboard');
-        
+
         return { success: true };
       } else {
         return { success: false, error: data.error || 'Registration failed' };
@@ -139,15 +192,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Call logout endpoint to invalidate refresh token
       const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
+      const accessToken = localStorage.getItem('accessToken');
+      if (refreshToken && accessToken) {
         await fetch(`${API_URL}/api/v1/auth/logout`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ refreshToken }),
-        });
+        }).catch(() => {}); // Ignore errors during logout
       }
     } catch (error) {
       console.error('Logout error:', error);
@@ -155,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear local state
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
       setUser(null);
       router.push('/login');
     }
@@ -162,10 +217,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function updateUser(data: Partial<User>) {
     try {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) return;
+
       const response = await fetch(`${API_URL}/api/v1/auth/me`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data),
@@ -173,7 +231,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData);
+        const updatedUser = { ...user, ...userData };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
       }
     } catch (error) {
       console.error('Update user error:', error);

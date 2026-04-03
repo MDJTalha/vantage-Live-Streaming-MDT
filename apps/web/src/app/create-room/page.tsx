@@ -6,12 +6,6 @@ import { Button, Input } from '@vantage/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, Video, Check, Lock, CheckCircle2 } from 'lucide-react';
 
-function generateRoomId(): string {
-  const adjectives = ['swift', 'calm', 'bright', 'wise', 'bold', 'keen', 'free', 'true', 'rapid', 'sharp'];
-  const nouns = ['eagle', 'tiger', 'wolf', 'hawk', 'lion', 'bear', 'fox', 'owl', 'dragon', 'phoenix'];
-  return `${adjectives[Math.floor(Math.random() * adjectives.length)]}-${nouns[Math.floor(Math.random() * nouns.length)]}-${Math.floor(Math.random() * 1000)}`;
-}
-
 export default function CreateRoomPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -31,81 +25,40 @@ export default function CreateRoomPage() {
     setIsCreating(true);
 
     try {
-      const roomCode = generateRoomId();
-      
-      // Try API first
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-        const response = await fetch(`${apiUrl}/api/v1/rooms`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const response = await fetch(`${apiUrl}/api/v1/meetings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify({
+          name: roomName || 'Untitled Meeting',
+          description,
+          type: 'team',
+          settings: {
+            maxParticipants,
+            allowChat: true,
+            allowScreenShare: true,
+            allowRecording: true,
+            requirePassword,
+            password: requirePassword ? password : undefined,
           },
-          body: JSON.stringify({
-            name: roomName || 'Untitled Meeting',
-            description,
-            settings: {
-              maxParticipants,
-              allowChat: true,
-              allowScreenShare: true,
-              allowRecording: true,
-              requirePassword,
-              password: requirePassword ? password : undefined,
-            },
-          }),
-        });
+        }),
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (!response.ok) {
-          throw new Error(data.error?.message || 'Failed to create room');
-        }
-
-        setSuccess('Room created successfully! Redirecting...');
-        setTimeout(() => {
-          router.push(`/room/${data.data.code || roomCode}`);
-        }, 1000);
-        return;
-      } catch (apiError) {
-        console.log('API unavailable, using demo mode');
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Failed to create meeting');
       }
 
-      // Demo mode fallback - create room in localStorage
-      const newRoom = {
-        id: 'room-' + Date.now(),
-        name: roomName || 'Untitled Meeting',
-        description,
-        code: roomCode,
-        hostId: user?.id || 'demo-user',
-        status: 'active',
-        participants: 1,
-        maxParticipants,
-        settings: {
-          allowChat: true,
-          allowScreenShare: true,
-          allowRecording: true,
-          requirePassword,
-          password: requirePassword ? password : undefined,
-        },
-        createdAt: new Date().toISOString(),
-      };
-
-      const savedRooms = JSON.parse(localStorage.getItem('myRooms') || '[]');
-      savedRooms.push(newRoom);
-      localStorage.setItem('myRooms', JSON.stringify(savedRooms));
-
-      // Also add to active rooms
-      const activeRooms = JSON.parse(localStorage.getItem('activeRooms') || '[]');
-      activeRooms.push(newRoom);
-      localStorage.setItem('activeRooms', JSON.stringify(activeRooms));
-
-      setSuccess('Room created successfully! Redirecting...');
+      setSuccess('Meeting created successfully! Redirecting...');
       setTimeout(() => {
-        router.push(`/room/${roomCode}`);
+        router.push(`/room/${data.data.code}`);
       }, 1000);
     } catch (err: any) {
-      setError(err.message || 'Failed to create room. Please try again.');
+      setError(err.message || 'Failed to create meeting. Please try again.');
       setIsCreating(false);
     }
   }

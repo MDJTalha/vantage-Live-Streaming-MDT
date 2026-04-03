@@ -1,12 +1,29 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@vantage/ui';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, CheckCircle2, Video, Sparkles, Shield, Zap, User } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, CheckCircle2, Video, Sparkles, Shield, Zap, User, Check } from 'lucide-react';
+
+const planFeatures: Record<string, { name: string; price: string; features: string[] }> = {
+  starter: {
+    name: 'Starter',
+    price: '$29/month',
+    features: ['Up to 50 participants', 'HD Video & Audio', 'Screen Sharing'],
+  },
+  professional: {
+    name: 'Professional',
+    price: '$99/month',
+    features: ['Up to 200 participants', '4K Video Support', 'AI Transcription', 'Recording & Analytics'],
+  },
+};
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedPlan = searchParams.get('plan') || '';
+  const plan = selectedPlan ? planFeatures[selectedPlan] : null;
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -123,6 +140,28 @@ export default function SignupPage() {
             <p className="text-blue-200 text-sm">Join VANTAGE and start hosting meetings</p>
           </div>
 
+          {/* Selected Plan Badge */}
+          {plan && (
+            <div className="mb-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-blue-300">Selected Plan</span>
+                <span className="text-lg font-bold text-white">{plan.price}</span>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl font-bold text-white">{plan.name}</span>
+                <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 text-xs font-medium">Active</span>
+              </div>
+              <ul className="space-y-1.5">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm text-blue-200">
+                    <Check className="h-3.5 w-3.5 text-green-400 flex-shrink-0" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Error/Success Messages */}
           {error && (
             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm mb-6" role="alert">
@@ -236,10 +275,7 @@ export default function SignupPage() {
             {/* Google */}
             <button
               type="button"
-              onClick={() => {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-                window.location.href = `${apiUrl}/api/v1/auth/oauth/google`;
-              }}
+              onClick={() => alert('Google OAuth is not configured in demo mode.\n\nPlease use the email/password form to create an account.')}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e293b] border border-blue-500/30 hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all text-white text-sm font-medium"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -254,10 +290,7 @@ export default function SignupPage() {
             {/* Microsoft */}
             <button
               type="button"
-              onClick={() => {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-                window.location.href = `${apiUrl}/api/v1/auth/oauth/microsoft`;
-              }}
+              onClick={() => alert('Microsoft OAuth is not configured in demo mode.\n\nPlease use the email/password form to create an account.')}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e293b] border border-blue-500/30 hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all text-white text-sm font-medium"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -272,10 +305,7 @@ export default function SignupPage() {
             {/* SAML SSO */}
             <button
               type="button"
-              onClick={() => {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-                window.location.href = `${apiUrl}/api/v1/auth/oauth/saml/login`;
-              }}
+              onClick={() => alert('SAML SSO is not configured in demo mode.\n\nPlease use the email/password form to create an account.')}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e293b] border border-blue-500/30 hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all text-white text-sm font-medium"
             >
               <Shield className="h-5 w-5 text-blue-400" />

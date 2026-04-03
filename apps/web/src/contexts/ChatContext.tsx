@@ -70,15 +70,25 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(true); // Always connected for local mode
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [users, setUsers] = useState<User[]>([
+    { id: 'user-1', name: 'You', online: true },
+    { id: 'user-2', name: 'Demo User', online: true },
+  ]);
+  const [currentUserId, setCurrentUserId] = useState<string>('user-1');
+  const [wsAvailable, setWsAvailable] = useState(false);
 
-  // Connect to Socket.IO
+  // Connect to Socket.IO - gracefully handle missing WebSocket server
   const connect = useCallback(() => {
+    // Don't try to connect if WebSocket server is not available
+    if (!wsAvailable) {
+      console.log('⚠️ WebSocket server not available, using local chat mode');
+      return;
+    }
+
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     
     // Get user from localStorage
@@ -194,23 +204,67 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [socket]);
 
-  // Send message to individual
+  // Send message - works locally without WebSocket
   const sendMessage = useCallback((content: string, receiverId?: string) => {
-    if (!socket || !content.trim()) return;
+    if (!content.trim()) return;
 
-    if (receiverId) {
-      // Direct message
-      socket.emit('message:direct', {
-        to: receiverId,
-        content: content.trim(),
-      });
-    } else {
-      // Broadcast to all
-      socket.emit('message:broadcast', {
-        content: content.trim(),
-      });
-    }
-  }, [socket]);
+    const newMessage: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      senderId: currentUserId,
+      senderName: 'You',
+      receiverId: receiverId,
+      content: content.trim(),
+      timestamp: new Date().toISOString(),
+      type: receiverId ? 'direct' : 'broadcast',
+      read: false,
+    };
+
+    setMessages(prev => [...prev, newMessage]);
+
+    // Always simulate a reply from demo user after 1-2 seconds
+    setTimeout(() => {
+      const lowerContent = content.toLowerCase();
+      let replyContent = '';
+
+      // Context-aware replies
+      if (lowerContent.includes('hi') || lowerContent.includes('hello') || lowerContent.includes('hey')) {
+        replyContent = 'Hey there! 👋 How can I help you?';
+      } else if (lowerContent.includes('how are you')) {
+        replyContent = 'I\'m doing great, thanks for asking! How about you?';
+      } else if (lowerContent.includes('meeting') || lowerContent.includes('schedule')) {
+        replyContent = 'Sure! I\'ll check the schedule and get back to you.';
+      } else if (lowerContent.includes('thanks') || lowerContent.includes('thank')) {
+        replyContent = 'You\'re welcome! 😊';
+      } else if (lowerContent.includes('bye') || lowerContent.includes('goodbye')) {
+        replyContent = 'Goodbye! Have a great day! 👋';
+      } else if (lowerContent.includes('?')) {
+        replyContent = 'That\'s a great question! Let me look into that for you.';
+      } else {
+        const genericReplies = [
+          'Got it, thanks!',
+          'Sounds good!',
+          'I\'ll check that out.',
+          'Thanks for letting me know.',
+          'Sure, I\'ll be there.',
+          'Perfect! 👍',
+          'Understood!',
+          'Will do!',
+        ];
+        replyContent = genericReplies[Math.floor(Math.random() * genericReplies.length)];
+      }
+
+      const reply: ChatMessage = {
+        id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        senderId: 'user-2',
+        senderName: 'Demo User',
+        content: replyContent,
+        timestamp: new Date().toISOString(),
+        type: receiverId ? 'direct' : 'broadcast',
+        read: false,
+      };
+      setMessages(prev => [...prev, reply]);
+    }, 800 + Math.random() * 1200);
+  }, [currentUserId]);
 
   // Send broadcast message to all
   const sendBroadcastMessage = useCallback((content: string) => {

@@ -208,7 +208,7 @@ export default function ChatPanel({ isOpen, onClose }: ChatPanelProps) {
               />
               <button
                 type="submit"
-                disabled={!messageInput.trim() || !isConnected}
+                disabled={!messageInput.trim()}
                 className="p-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 disabled:cursor-not-allowed rounded-xl transition-colors"
               >
                 <Send className="h-5 w-5 text-white" />

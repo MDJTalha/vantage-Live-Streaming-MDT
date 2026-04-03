@@ -301,10 +301,7 @@ export default function LoginPage() {
                 {/* Google */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-                    window.location.href = `${apiUrl}/api/v1/auth/oauth/google`;
-                  }}
+                  onClick={() => alert('Google OAuth is not configured in demo mode.\n\nUse the email/password form to sign in with demo credentials:\n\nAdmin: admin@vantage.live / @admin@123#\nHost: host@vantage.live / @host@123#\nUser: user@vantage.live / @user@123#')}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e293b] border border-blue-500/30 hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all text-white text-sm font-medium"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -319,10 +316,7 @@ export default function LoginPage() {
                 {/* Microsoft */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-                    window.location.href = `${apiUrl}/api/v1/auth/oauth/microsoft`;
-                  }}
+                  onClick={() => alert('Microsoft OAuth is not configured in demo mode.\n\nUse the email/password form to sign in with demo credentials:\n\nAdmin: admin@vantage.live / @admin@123#\nHost: host@vantage.live / @host@123#\nUser: user@vantage.live / @user@123#')}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e293b] border border-blue-500/30 hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all text-white text-sm font-medium"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -337,10 +331,7 @@ export default function LoginPage() {
                 {/* SAML SSO */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-                    window.location.href = `${apiUrl}/api/v1/auth/oauth/saml/login`;
-                  }}
+                  onClick={() => alert('SAML SSO is not configured in demo mode.\n\nUse the email/password form to sign in with demo credentials:\n\nAdmin: admin@vantage.live / @admin@123#\nHost: host@vantage.live / @host@123#\nUser: user@vantage.live / @user@123#')}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e293b] border border-blue-500/30 hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all text-white text-sm font-medium"
                 >
                   <Shield className="h-5 w-5 text-blue-400" />

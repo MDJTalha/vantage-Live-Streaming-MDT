@@ -208,7 +208,7 @@ export default function HomePage() {
                   <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />Screen Sharing</li>
                 </ul>
               </div>
-              <Button variant="primary" onClick={() => router.push('/signup')} className="w-full bg-blue-600 hover:bg-blue-500 mt-6">Get Started</Button>
+              <Button variant="primary" onClick={() => router.push('/signup?plan=starter')} className="w-full bg-blue-600 hover:bg-blue-500 mt-6">Get Started</Button>
             </div>
             <div className="p-6 rounded-2xl bg-[#1e293b] border-2 border-blue-500 relative flex flex-col h-full">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-blue-600 text-xs font-bold text-white">Popular</div>
@@ -223,7 +223,7 @@ export default function HomePage() {
                   <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />Recording & Analytics</li>
                 </ul>
               </div>
-              <Button variant="primary" onClick={() => router.push('/signup')} className="w-full bg-blue-600 hover:bg-blue-500 mt-6">Get Started</Button>
+              <Button variant="primary" onClick={() => router.push('/signup?plan=professional')} className="w-full bg-blue-600 hover:bg-blue-500 mt-6">Get Started</Button>
             </div>
             <div className="p-6 rounded-2xl bg-[#1e293b] border border-blue-500/20 flex flex-col h-full">
               <div className="flex-1">
@@ -237,7 +237,7 @@ export default function HomePage() {
                   <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />SLA Guarantee</li>
                 </ul>
               </div>
-              <Button variant="primary" onClick={() => router.push('/login')} className="w-full bg-blue-600 hover:bg-blue-500 mt-6">Contact Sales</Button>
+              <Button variant="primary" onClick={() => router.push('/support?sales=true')} className="w-full bg-blue-600 hover:bg-blue-500 mt-6">Contact Sales</Button>
             </div>
           </div>
         </div>
@@ -251,22 +251,22 @@ export default function HomePage() {
             <p className="text-blue-200 max-w-2xl mx-auto">Documentation, guides, and resources to help you succeed.</p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div onClick={() => router.push('/dashboard')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
+            <div onClick={() => router.push('/docs')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
               <h3 className="font-bold text-white mb-2">📚 Documentation</h3>
               <p className="text-sm text-blue-200 mb-4">Complete API reference and integration guides.</p>
               <span className="text-sm text-blue-400 group-hover:text-blue-300 font-medium">Explore Docs →</span>
             </div>
-            <div onClick={() => router.push('/dashboard')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
+            <div onClick={() => router.push('/tutorials')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
               <h3 className="font-bold text-white mb-2">🎥 Video Tutorials</h3>
               <p className="text-sm text-blue-200 mb-4">Step-by-step guides for hosts and participants.</p>
               <span className="text-sm text-blue-400 group-hover:text-blue-300 font-medium">Watch Videos →</span>
             </div>
-            <div onClick={() => router.push('/dashboard')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
+            <div onClick={() => router.push('/community')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
               <h3 className="font-bold text-white mb-2">💬 Community</h3>
               <p className="text-sm text-blue-200 mb-4">Join our community forum and connect with users.</p>
               <span className="text-sm text-blue-400 group-hover:text-blue-300 font-medium">Join Community →</span>
             </div>
-            <div onClick={() => router.push('/dashboard')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
+            <div onClick={() => router.push('/support')} className="p-5 rounded-2xl bg-[#1e293b] border border-blue-500/20 cursor-pointer hover:border-blue-400 hover:bg-[#1e293b]/80 transition-all duration-300 group">
               <h3 className="font-bold text-white mb-2">📞 Support</h3>
               <p className="text-sm text-blue-200 mb-4">24/7 enterprise support for all your needs.</p>
               <span className="text-sm text-blue-400 group-hover:text-blue-300 font-medium">Contact Support →</span>

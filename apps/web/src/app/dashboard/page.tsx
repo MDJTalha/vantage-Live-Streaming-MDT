@@ -44,6 +44,8 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'scheduled'>('all');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAISearch, setShowAISearch] = useState(false);
+  const [aiSearchQuery, setAISearchQuery] = useState('');
   const [aiInsights, setAiInsights] = useState<AIInsights | null>(null);
 
   useEffect(() => {
@@ -174,18 +176,20 @@ export default function Dashboard() {
 
             {/* Premium Search */}
             <div className="hidden md:flex flex-1 max-w-xl mx-8">
-              <div className="relative w-full group">
+              <div
+                onClick={() => setShowAISearch(true)}
+                className="relative w-full group cursor-pointer"
+              >
                 <Search className="absolute left-4 h-4 w-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
                 <input
                   type="text"
+                  readOnly
                   placeholder="Search meetings, recordings, or ask AI..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer hover:border-slate-600"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                   <kbd className="hidden lg:inline-flex items-center gap-1 px-2 py-1 text-xs text-slate-600 bg-slate-800 rounded-md border border-slate-700">
-                    <Search className="h-3 w-3" />
+                    <Sparkles className="h-3 w-3" />
                     <span>AI Search</span>
                   </kbd>
                 </div>
@@ -258,194 +262,67 @@ export default function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-8 space-y-8">
-        {/* AI Daily Briefing - NEW */}
-        {aiInsights && (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-950/60 via-purple-950/60 to-blue-950/60 border border-blue-500/20 p-6">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl" />
-            
-            <div className="relative">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                    <Sparkles className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">AI Daily Briefing</h2>
-                    <p className="text-sm text-slate-400">Your personalized executive summary</p>
-                  </div>
-                </div>
-                <button
-                  onClick={loadAIInsights}
-                  className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
-                  title="Refresh AI Insights"
-                >
-                  <RefreshCw className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  {aiInsights.dailyBriefing.map((item, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0" />
-                      <p className="text-slate-300 text-sm">{item}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                    <Calendar className="h-5 w-5 text-blue-400 mb-2" />
-                    <p className="text-2xl font-bold text-white">{aiInsights.meetingsToday}</p>
-                    <p className="text-xs text-slate-500">Meetings Today</p>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                    <FileText className="h-5 w-5 text-purple-400 mb-2" />
-                    <p className="text-2xl font-bold text-white">{aiInsights.recordingsReady}</p>
-                    <p className="text-xs text-slate-500">Summaries Ready</p>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                    <Target className="h-5 w-5 text-amber-400 mb-2" />
-                    <p className="text-2xl font-bold text-white">{aiInsights.pendingActionItems}</p>
-                    <p className="text-xs text-slate-500">Action Items</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Quick Actions - Premium */}
-        <div className="grid md:grid-cols-4 gap-4">
+      <main className="container mx-auto px-6 py-8 space-y-6">
+        {/* Quick Actions - Redesigned */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button
             onClick={() => router.push('/create-room')}
-            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 transition-all shadow-lg shadow-blue-500/30"
+            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:-translate-y-0.5"
           >
-            <div className="relative z-10">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Plus className="h-6 w-6 text-white" />
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-white/30 transition-all">
+                <Plus className="h-7 w-7 text-white" />
               </div>
-              <p className="text-lg font-bold text-white mb-1">Start Meeting</p>
-              <p className="text-sm text-blue-100">Instant meeting</p>
+              <p className="text-base font-bold text-white mb-1">Start Meeting</p>
+              <p className="text-sm text-blue-100/90">Instant meeting</p>
             </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform" />
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
           </button>
 
           <button
             onClick={() => router.push('/schedule-room')}
-            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 transition-all shadow-lg shadow-purple-500/30"
+            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:-translate-y-0.5"
           >
-            <div className="relative z-10">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Calendar className="h-6 w-6 text-white" />
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-white/30 transition-all">
+                <Calendar className="h-7 w-7 text-white" />
               </div>
-              <p className="text-lg font-bold text-white mb-1">Schedule</p>
-              <p className="text-sm text-purple-100">Plan ahead</p>
+              <p className="text-base font-bold text-white mb-1">Schedule</p>
+              <p className="text-sm text-purple-100/90">Plan ahead</p>
             </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform" />
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
           </button>
 
           <button
             onClick={() => router.push('/join')}
-            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 transition-all shadow-lg shadow-emerald-500/30"
+            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:-translate-y-0.5"
           >
-            <div className="relative z-10">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Mic className="h-6 w-6 text-white" />
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-white/30 transition-all">
+                <Mic className="h-7 w-7 text-white" />
               </div>
-              <p className="text-lg font-bold text-white mb-1">Join Meeting</p>
-              <p className="text-sm text-emerald-100">Enter code</p>
+              <p className="text-base font-bold text-white mb-1">Join Meeting</p>
+              <p className="text-sm text-emerald-100/90">Enter code</p>
             </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform" />
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
           </button>
 
           <button
             onClick={() => router.push('/analytics')}
-            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 transition-all shadow-lg shadow-amber-500/30"
+            className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 transition-all shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:-translate-y-0.5"
           >
-            <div className="relative z-10">
-              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <BarChart3 className="h-6 w-6 text-white" />
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-4 group-hover:scale-110 group-hover:bg-white/30 transition-all">
+                <BarChart3 className="h-7 w-7 text-white" />
               </div>
-              <p className="text-lg font-bold text-white mb-1">Analytics</p>
-              <p className="text-sm text-amber-100">Insights</p>
+              <p className="text-base font-bold text-white mb-1">Analytics</p>
+              <p className="text-sm text-amber-100/90">Insights</p>
             </div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform" />
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
           </button>
         </div>
 
-        {/* AI Quick Actions - NEW */}
-        <div className="rounded-2xl bg-gradient-to-r from-purple-950/40 via-slate-900/50 to-blue-950/40 border border-purple-500/20 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                <Brain className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">AI Assistant</h3>
-                <p className="text-sm text-slate-400">Intelligent meeting assistance</p>
-              </div>
-            </div>
-            <button className="text-sm font-medium text-purple-400 hover:text-purple-300 transition-all flex items-center gap-1">
-              View All AI Features
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-3">
-            <button className="group p-4 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-purple-500/50 transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-all">
-                  <FileText className="h-5 w-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Generate Summary</p>
-                  <p className="text-xs text-slate-500">AI meeting notes</p>
-                </div>
-              </div>
-            </button>
-
-            <button className="group p-4 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-purple-500/50 transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-all">
-                  <CheckCircle2 className="h-5 w-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Action Items</p>
-                  <p className="text-xs text-slate-500">Extract tasks</p>
-                </div>
-              </div>
-            </button>
-
-            <button className="group p-4 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-purple-500/50 transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-all">
-                  <MessageSquare className="h-5 w-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Sentiment Analysis</p>
-                  <p className="text-xs text-slate-500">Meeting insights</p>
-                </div>
-              </div>
-            </button>
-
-            <button className="group p-4 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-purple-500/50 transition-all text-left">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-all">
-                  <Zap className="h-5 w-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Quick Actions</p>
-                  <p className="text-xs text-slate-500">AI commands</p>
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Live Meeting Alert - Premium */}
+        {/* Meetings Section */}
         {liveMeeting && (
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-950/60 via-red-900/40 to-red-950/60 border border-red-500/30 p-6">
             <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-3xl" />
@@ -650,6 +527,13 @@ export default function Dashboard() {
       {showNotifications && (
         <NotificationsDropdown onClose={() => setShowNotifications(false)} />
       )}
+
+      {/* AI Search Modal */}
+      <AISearchModal
+        isOpen={showAISearch}
+        onClose={() => setShowAISearch(false)}
+        initialQuery={aiSearchQuery}
+      />
 
       {/* Chat Feature */}
       <ChatButton />
@@ -887,21 +771,94 @@ function EditMeetingModal({ room, onClose, onSave }: any) {
   );
 }
 
-// Mock service for demo
+// Meeting service - connects to API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
 const meetingService = {
-  getAllMeetings: async (_userId: string) => [],
-  getStatistics: async (_userId: string) => ({
-    totalMeetings: 0,
-    activeMeetings: 0,
-    scheduledMeetings: 0,
-    totalParticipants: 0,
-    totalRecordings: 0,
-    storageUsed: 0,
-  }),
-  deleteMeeting: async (_code: string) => true,
-  updateMeeting: async (_code: string, _data: any) => true,
+  getAllMeetings: async (userId: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/api/v1/meetings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch meetings');
+      const data = await response.json();
+      return data.data || data.meetings || [];
+    } catch (error) {
+      console.error('Error fetching meetings:', error);
+      return [];
+    }
+  },
+  getStatistics: async (userId: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/api/v1/meetings/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      const data = await response.json();
+      return data.data || data.stats || {
+        totalMeetings: 0,
+        activeMeetings: 0,
+        scheduledMeetings: 0,
+        totalParticipants: 0,
+        totalRecordings: 0,
+        storageUsed: 0,
+      };
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      return {
+        totalMeetings: 0,
+        activeMeetings: 0,
+        scheduledMeetings: 0,
+        totalParticipants: 0,
+        totalRecordings: 0,
+        storageUsed: 0,
+      };
+    }
+  },
+  deleteMeeting: async (code: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/api/v1/meetings/${code}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting meeting:', error);
+      return false;
+    }
+  },
+  updateMeeting: async (code: string, data: any) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/api/v1/meetings/${code}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Error updating meeting:', error);
+      return false;
+    }
+  },
 };
 
 // Import actual components
 import ChatButton from '@/components/ChatButton';
+import AISearchModal from '@/components/AISearchModal';
 import { Briefcase, DollarSign } from 'lucide-react';
