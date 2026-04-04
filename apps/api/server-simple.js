@@ -1,9 +1,24 @@
 // Simple API server for development
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+
+// Load .env.local if it exists
+const envPath = path.join(__dirname, '.env.local');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    const [key, ...valueParts] = line.split('=');
+    if (key && valueParts.length > 0 && !key.startsWith('#')) {
+      process.env[key.trim()] = valueParts.join('=').trim();
+    }
+  });
+  console.log('✓ Loaded .env.local configuration');
+}
 
 app.use(cors());
 app.use(express.json());
@@ -262,6 +277,96 @@ app.patch('/api/v1/auth/me', (req, res) => {
     avatarUrl: null,
     lastLoginAt: new Date().toISOString(),
   });
+});
+
+// AI Chat endpoint - uses OpenAI for intelligent responses
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// Chat history per user (in-memory)
+const chatHistories = {};
+
+app.post('/api/v1/chat', async (req, res) => {
+  const { message, userId = 'demo-user', conversationId = 'default' } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ success: false, error: 'Message is required' });
+  }
+
+  if (!OPENAI_API_KEY) {
+    return res.status(503).json({
+      success: false,
+      error: 'OpenAI API key not configured',
+      fallback: 'AI services are not available. Please configure OPENAI_API_KEY.',
+    });
+  }
+
+  try {
+    // Initialize conversation history
+    const key = `${userId}-${conversationId}`;
+    if (!chatHistories[key]) {
+      chatHistories[key] = [
+        {
+          role: 'system',
+          content: `You are VANTAGE AI, an intelligent meeting assistant for VANTAGE Executive - an enterprise meeting platform. You help users with meeting scheduling, collaboration, and productivity. Be helpful, professional, and concise. You can discuss meetings, scheduling, team collaboration, video conferencing, and general productivity topics.`,
+        },
+      ];
+    }
+
+    // Add user message to history
+    chatHistories[key].push({ role: 'user', content: message.trim() });
+
+    // Keep only last 10 messages to manage context
+    if (chatHistories[key].length > 11) {
+      chatHistories[key] = [chatHistories[key][0], ...chatHistories[key].slice(-10)];
+    }
+
+    // Call OpenAI API
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: chatHistories[key],
+        max_tokens: 500,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || 'OpenAI API error');
+    }
+
+    const data = await response.json();
+    const aiResponse = data.choices[0]?.message?.content || 'I apologize, I could not generate a response.';
+
+    // Add AI response to history
+    chatHistories[key].push({ role: 'assistant', content: aiResponse });
+
+    res.json({
+      success: true,
+      message: aiResponse,
+      conversationId,
+    });
+  } catch (error) {
+    console.error('AI Chat error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get AI response',
+    });
+  }
+});
+
+// Clear chat history endpoint
+app.delete('/api/v1/chat/:conversationId', (req, res) => {
+  const { conversationId } = req.params;
+  const userId = req.query.userId || 'demo-user';
+  const key = `${userId}-${conversationId}`;
+  delete chatHistories[key];
+  res.json({ success: true, message: 'Chat history cleared' });
 });
 
 app.listen(PORT, () => {

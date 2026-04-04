@@ -204,8 +204,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [socket]);
 
-  // Send message - works locally without WebSocket
-  const sendMessage = useCallback((content: string, receiverId?: string) => {
+  // Send message - uses OpenAI API for intelligent responses
+  const sendMessage = useCallback(async (content: string, receiverId?: string) => {
     if (!content.trim()) return;
 
     const newMessage: ChatMessage = {
@@ -221,49 +221,54 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     setMessages(prev => [...prev, newMessage]);
 
-    // Always simulate a reply from demo user after 1-2 seconds
-    setTimeout(() => {
-      const lowerContent = content.toLowerCase();
-      let replyContent = '';
+    // Call AI API for intelligent response
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const response = await fetch(`${API_URL}/api/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: content.trim(),
+          userId: currentUserId,
+          conversationId: 'main',
+        }),
+      });
 
-      // Context-aware replies
-      if (lowerContent.includes('hi') || lowerContent.includes('hello') || lowerContent.includes('hey')) {
-        replyContent = 'Hey there! 👋 How can I help you?';
-      } else if (lowerContent.includes('how are you')) {
-        replyContent = 'I\'m doing great, thanks for asking! How about you?';
-      } else if (lowerContent.includes('meeting') || lowerContent.includes('schedule')) {
-        replyContent = 'Sure! I\'ll check the schedule and get back to you.';
-      } else if (lowerContent.includes('thanks') || lowerContent.includes('thank')) {
-        replyContent = 'You\'re welcome! 😊';
-      } else if (lowerContent.includes('bye') || lowerContent.includes('goodbye')) {
-        replyContent = 'Goodbye! Have a great day! 👋';
-      } else if (lowerContent.includes('?')) {
-        replyContent = 'That\'s a great question! Let me look into that for you.';
-      } else {
-        const genericReplies = [
-          'Got it, thanks!',
-          'Sounds good!',
-          'I\'ll check that out.',
-          'Thanks for letting me know.',
-          'Sure, I\'ll be there.',
-          'Perfect! 👍',
-          'Understood!',
-          'Will do!',
-        ];
-        replyContent = genericReplies[Math.floor(Math.random() * genericReplies.length)];
+      const data = await response.json();
+
+      if (data.success && data.message) {
+        const aiReply: ChatMessage = {
+          id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          senderId: 'ai-assistant',
+          senderName: 'VANTAGE AI',
+          content: data.message,
+          timestamp: new Date().toISOString(),
+          type: receiverId ? 'direct' : 'broadcast',
+          read: false,
+        };
+        setMessages(prev => [...prev, aiReply]);
       }
-
-      const reply: ChatMessage = {
+    } catch (error) {
+      console.error('AI chat error:', error);
+      // Fallback to local response if API fails
+      const fallbackReplies = [
+        'I understand. Let me help you with that.',
+        'Got it! I\'m processing your request.',
+        'Thanks for your message. How else can I assist?',
+      ];
+      const fallbackReply: ChatMessage = {
         id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        senderId: 'user-2',
-        senderName: 'Demo User',
-        content: replyContent,
+        senderId: 'ai-assistant',
+        senderName: 'VANTAGE AI',
+        content: fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)],
         timestamp: new Date().toISOString(),
         type: receiverId ? 'direct' : 'broadcast',
         read: false,
       };
-      setMessages(prev => [...prev, reply]);
-    }, 800 + Math.random() * 1200);
+      setMessages(prev => [...prev, fallbackReply]);
+    }
   }, [currentUserId]);
 
   // Send broadcast message to all
