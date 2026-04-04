@@ -33,10 +33,10 @@ export default function ScheduleRoomPage() {
         return;
       }
 
-      // Create room via API or demo mode
+      // Create meeting via API
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-        const response = await fetch(`${apiUrl}/api/v1/rooms`, {
+        const response = await fetch(`${apiUrl}/api/v1/meetings`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -45,12 +45,15 @@ export default function ScheduleRoomPage() {
           body: JSON.stringify({
             name,
             description,
+            type: 'scheduled',
             settings: {
               maxParticipants: 100,
               allowChat: true,
               allowScreenShare: true,
               allowRecording: true,
               enableWaitingRoom: true,
+              scheduledDate: `${date}T${time}`,
+              duration: parseInt(duration),
             },
           }),
         });
@@ -67,45 +70,11 @@ export default function ScheduleRoomPage() {
         }, 1000);
         return;
       } catch (apiError) {
-        console.log('API unavailable, using demo mode');
+        console.error('API error:', apiError);
+        setError('Failed to connect to server. Please try again.');
+        setIsLoading(false);
+        return;
       }
-
-      // Demo mode fallback
-      const roomCode = 'ROOM-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-      const scheduledMeeting = {
-        id: 'room-' + Date.now(),
-        name,
-        description,
-        code: roomCode,
-        hostId: user?.id || 'demo-user',
-        hostName: user?.name || 'Host',
-        status: 'scheduled',
-        scheduledAt: new Date(`${date}T${time}`).toISOString(),
-        scheduledDate: `${date}, ${time}`,
-        duration: parseInt(duration),
-        participants: 0,
-        settings: {
-          maxParticipants: 100,
-          allowChat: true,
-          allowScreenShare: true,
-          allowRecording: true,
-        },
-      };
-
-      // Save to scheduledRooms
-      const scheduledRooms = JSON.parse(localStorage.getItem('scheduledRooms') || '[]');
-      scheduledRooms.push(scheduledMeeting);
-      localStorage.setItem('scheduledRooms', JSON.stringify(scheduledRooms));
-
-      // Also save to myRooms for dashboard display
-      const myRooms = JSON.parse(localStorage.getItem('myRooms') || '[]');
-      myRooms.push(scheduledMeeting);
-      localStorage.setItem('myRooms', JSON.stringify(myRooms));
-
-      setSuccess('Meeting scheduled successfully!');
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to schedule meeting. Please try again.');
       setIsLoading(false);

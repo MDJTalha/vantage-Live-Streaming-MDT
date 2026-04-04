@@ -203,18 +203,24 @@ app.post('/api/v1/meetings', (req, res) => {
   const adjectives = ['swift', 'calm', 'bright', 'wise', 'bold', 'keen', 'free', 'true', 'rapid', 'sharp'];
   const nouns = ['eagle', 'tiger', 'wolf', 'hawk', 'lion', 'bear', 'fox', 'owl', 'dragon', 'phoenix'];
   const roomCode = `${adjectives[Math.floor(Math.random() * adjectives.length)]}-${nouns[Math.floor(Math.random() * nouns.length)]}-${Math.floor(Math.random() * 1000)}`;
+
+  // Determine status based on type or settings
+  const isScheduled = type === 'scheduled' || (settings && settings.scheduledDate);
   
   const newMeeting = {
     id: 'meeting-' + Date.now(),
     name: name || 'Untitled Meeting',
     code: roomCode,
     description: description || '',
-    status: 'active',
-    participants: 1,
+    status: isScheduled ? 'scheduled' : 'active',
+    participants: isScheduled ? 0 : 1,
     type: type || 'team',
     settings: settings || {},
     createdAt: new Date().toISOString(),
     hostId: 'demo-user',
+    // Add scheduled date if provided
+    ...(settings && settings.scheduledDate ? { scheduledDate: settings.scheduledDate } : {}),
+    ...(settings && settings.duration ? { duration: settings.duration } : {}),
   };
   
   meetings.push(newMeeting);
