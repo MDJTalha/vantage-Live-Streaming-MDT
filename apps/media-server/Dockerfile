@@ -1,5 +1,5 @@
 # VANTAGE Media Server - Production Dockerfile
-FROM node:25.8.2-alpine AS builder
+FROM node:25.9.0-alpine AS builder
 
 # Install build dependencies for mediasoup
 RUN apk add --no-cache \
