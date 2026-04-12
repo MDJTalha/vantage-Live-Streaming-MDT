@@ -1,5 +1,6 @@
-// Prisma Schema for VANTAGE Executive Platform
-// Enterprise-grade database schema for Fortune 500 CEOs & Board of Directors
+// Prisma Schema for VANTAGE Executive Live Streaming Platform
+// Consolidated schema — single source of truth for all models
+// Generated: April 12, 2026
 
 generator client {
   provider = "prisma-client-js"
@@ -10,41 +11,55 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================== USER MANAGEMENT ====================
+// ============================================
+// USER MANAGEMENT
+// ============================================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  name          String
-  passwordHash  String
-  role          Role      @default(PARTICIPANT)
-  avatarUrl     String?
-  emailVerified Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  lastLoginAt   DateTime?
+  id               String    @id @default(uuid())
+  email            String    @unique
+  name             String
+  passwordHash     String
+  role             Role      @default(PARTICIPANT)
+  avatarUrl        String?
+  emailVerified    Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastLoginAt      DateTime?
+  organizationId   String?
 
-  // 🔐 MFA Fields
-  mfaSecret      String?
-  mfaEnabled     Boolean @default(false)
-  mfaBackupCodes Json? // Array of backup codes
+  // MFA Fields
+  mfaSecret        String?
+  mfaEnabled       Boolean   @default(false)
+  mfaBackupCodes   Json?
 
-  // 🔐 SAML Fields
+  // SAML Fields
   samlNameID       String?
   samlNameIDFormat String?
-  samlProvider     String? // okta, azure-ad, onelogin, etc.
+  samlProvider     String?
 
   // Relations
-  meetingsHosted Meeting[]       @relation("HostedMeetings")
-  participations Participation[]
-  sessions       Session[]
-  notifications  Notification[]
-  recordings     Recording[]
-  messages       Message[]
+  organization       Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  roomsHosted        Room[]              @relation("UserRoomHost")
+  roomParticipants   RoomParticipant[]
+  meetingsHosted     Meeting[]           @relation("HostedMeetings")
+  participations     Participation[]
+  sessions           Session[]
+  notifications      Notification[]
+  recordings         Recording[]
+  messages           Message[]           @relation("SentMessages")
+  chatMessages       ChatMessage[]
+  reactions          Reaction[]
+  consentRecords     ConsentRecord[]
+  dataExportRequests DataExportRequest[]
+  pollVotes          PollVote[]
+  questions          Question[]
+  podcasts           Podcast[]
+  apiKeys            ApiKey[]            @relation("UserApiKeys")
 
   @@index([email])
   @@index([role])
-  @@index([id])
+  @@index([organizationId])
 }
 
 enum Role {
@@ -54,18 +69,21 @@ enum Role {
   GUEST
 }
 
-// ==================== SESSION MANAGEMENT ====================
+// ============================================
+// SESSION MANAGEMENT
+// ============================================
 
 model Session {
-  id           String   @id @default(uuid())
-  userId       String
-  tokenHash    String   @unique
-  refreshToken String   @unique
-  userAgent    String?
-  ipAddress    String?
-  provider     String? // local, saml, oauth
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  id               String    @id @default(uuid())
+  userId           String
+  tokenHash        String    @unique
+  refreshToken     String    @unique
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  provider         String?   // local, saml, oauth
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -74,22 +92,140 @@ model Session {
   @@index([expiresAt])
 }
 
-// ==================== MEETINGS ====================
+// ============================================
+// ORGANIZATION & BILLING
+// ============================================
+
+model Organization {
+  id               String           @id @default(uuid())
+  name             String           @unique
+  slug             String           @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  subscriptionTier SubscriptionTier @default(FREE)
+  maxParticipants  Int              @default(100)
+  maxRooms         Int              @default(10)
+  storageQuota     BigInt           @default(10737418240) // 10GB default
+
+  // Relations
+  users        User[]
+  rooms        Room[]
+  subscription Subscription?
+  invoices     Invoice[]
+  apiKeys      ApiKey[]
+  recordings   Recording[]
+
+  @@index([slug])
+  @@index([subscriptionTier])
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+model Subscription {
+  id                   String           @id @default(uuid())
+  organizationId       String           @unique
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+  tier                 SubscriptionTier @default(FREE)
+  status               String           @default("active")
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([stripeCustomerId])
+  @@index([status])
+}
+
+model Invoice {
+  id                String        @id @default(uuid())
+  organizationId    String
+  stripeInvoiceId   String?
+  invoiceNumber     String        @unique
+  amount            Int           // in cents
+  status            InvoiceStatus @default(PENDING)
+  dueDate           DateTime?
+  paidAt            DateTime?
+  url               String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([invoiceNumber])
+  @@index([status])
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  FAILED
+  VOID
+}
+
+model ApiKey {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String?
+  name           String
+  keyHash        String    @unique
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation("UserApiKeys", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([keyHash])
+  @@index([userId])
+}
+
+model UsageMetrics {
+  id             String   @id @default(uuid())
+  organizationId String
+  period         DateTime // First day of the billing period
+  roomsCreated   Int      @default(0)
+  messagesSent   Int      @default(0)
+  storageUsed    BigInt   @default(0)
+  bandwidthUsed  BigInt   @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([period])
+  @@unique([organizationId, period])
+}
+
+// ============================================
+// MEETINGS
+// ============================================
 
 model Meeting {
-  id              String        @id @default(uuid())
-  code            String        @unique
-  name            String
-  description     String?
-  hostId          String
-  status          MeetingStatus @default(SCHEDULED)
-  startedAt       DateTime?
-  endedAt         DateTime?
-  scheduledAt     DateTime?
-  duration        Int? // in minutes
-  maxParticipants Int           @default(100)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                String        @id @default(uuid())
+  code              String        @unique
+  name              String
+  description       String?
+  hostId            String
+  hostName          String?
+  status            MeetingStatus @default(SCHEDULED)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  scheduledAt       DateTime?
+  duration          Int?          // in minutes
+  maxParticipants   Int           @default(100)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   // Settings
   allowChat           Boolean @default(true)
@@ -105,6 +241,7 @@ model Meeting {
   participations Participation[]
   messages       Message[]
   recordings     Recording[]
+  reactions      Reaction[]
   analytics      MeetingAnalytics? @relation("MeetingToAnalytics")
 
   @@index([hostId])
@@ -120,7 +257,9 @@ enum MeetingStatus {
   CANCELLED
 }
 
-// ==================== PARTICIPATION ====================
+// ============================================
+// PARTICIPATION
+// ============================================
 
 model Participation {
   id        String              @id @default(uuid())
@@ -132,8 +271,16 @@ model Participation {
   leftAt    DateTime?
   status    ParticipationStatus @default(JOINED)
 
+  // Media state (used by socket.ts)
+  isSpeaking   Boolean @default(false)
+  isHandRaised Boolean @default(false)
+  isMuted      Boolean @default(false)
+  isVideoOff   Boolean @default(false)
+
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  reactions Reaction[]
 
   @@index([meetingId])
   @@index([userId])
@@ -154,33 +301,319 @@ enum ParticipationStatus {
   DENIED
 }
 
-// ==================== MESSAGES ====================
+// ============================================
+// ROOMS (Legacy — kept for backward compatibility)
+// ============================================
 
-model Message {
+model Room {
+  id                String     @id @default(uuid())
+  code              String     @unique
+  name              String
+  hostId            String
+  organizationId    String?
+  status            RoomStatus @default(SCHEDULED)
+  maxParticipants   Int        @default(100)
+  password          String?
+  allowChat         Boolean    @default(true)
+  allowScreenShare  Boolean    @default(true)
+  allowRecording    Boolean    @default(true)
+  enableWaitingRoom Boolean    @default(false)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  duration          Int?       // in minutes
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  host         User            @relation("UserRoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  organization Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  participants RoomParticipant[]
+  messages     ChatMessage[]
+  recordings   Recording[]
+  reactions    Reaction[]
+  polls        Poll[]
+  questions    Question[]
+  analytics    RoomAnalytics?
+
+  @@index([code])
+  @@index([hostId])
+  @@index([status])
+}
+
+enum RoomStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+model RoomParticipant {
+  id           String   @id @default(uuid())
+  roomId       String
+  userId       String?
+  name         String
+  role         RoomRole @default(PARTICIPANT)
+  joinedAt     DateTime @default(now())
+  leftAt       DateTime?
+  isSpeaking   Boolean  @default(false)
+  isHandRaised Boolean  @default(false)
+  isMuted      Boolean  @default(false)
+  isVideoOff   Boolean  @default(false)
+
+  room Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([roomId])
+  @@index([userId])
+}
+
+enum RoomRole {
+  HOST
+  CO_HOST
+  PRESENTER
+  PARTICIPANT
+  VIEWER
+}
+
+model RoomAnalytics {
+  id                String @id @default(uuid())
+  roomId            String @unique
+  totalParticipants Int    @default(0)
+  totalDuration     Int    @default(0) // in seconds
+  totalMessages     Int    @default(0)
+  totalReactions    Int    @default(0)
+  peakParticipants  Int    @default(0)
+  lastUpdatedAt     DateTime @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+}
+
+// ============================================
+// MESSAGES
+// ============================================
+
+// ChatMessage — used by Room-based chat (with replies)
+model ChatMessage {
   id        String      @id @default(uuid())
-  meetingId String
+  roomId    String
   userId    String?
   guestName String?
   content   String
   type      MessageType @default(TEXT)
+  parentId  String?
   createdAt DateTime    @default(now())
 
+  room   Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user   User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  parent ChatMessage?  @relation("MessageReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies  ChatMessage[] @relation("MessageReplies")
+
+  @@index([roomId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Message — used by Meeting-based chat & direct messages (socket.ts)
+model Message {
+  id          String      @id @default(uuid())
+  meetingId   String
+  senderId    String
+  receiverId  String?
+  content     String
+  messageType MessageType @default(TEXT)
+  isBroadcast Boolean     @default(false)
+  read        Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sender  User    @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([meetingId])
-  @@index([userId])
+  @@index([senderId])
+  @@index([receiverId])
   @@index([createdAt])
 }
 
 enum MessageType {
   TEXT
+  FILE
   SYSTEM
+  EMOJI
+  IMAGE
   RESCHEDULE
   NOT_JOINING
 }
 
-// ==================== NOTIFICATIONS ====================
+// ============================================
+// REACTIONS
+// ============================================
+
+model Reaction {
+  id            String   @id @default(uuid())
+  roomId        String?
+  meetingId     String?
+  userId        String
+  participantId String?
+  type          String   // emoji type
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime?
+
+  room        Room?         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  meeting     Meeting?      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participation Participation? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+  @@index([roomId])
+  @@index([meetingId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================
+// RECORDINGS
+// ============================================
+
+model Recording {
+  id            String          @id @default(uuid())
+  roomId        String?
+  meetingId     String?
+  userId        String
+  organizationId String?
+  title         String
+  description   String?
+  url           String
+  thumbnailUrl  String?
+  duration      Int             // in seconds
+  size          Int             // in bytes
+  format        String          @default("mp4")
+  status        RecordingStatus @default(PROCESSING)
+  isPublic      Boolean         @default(false)
+  downloadCount Int             @default(0)
+  viewCount     Int             @default(0)
+  createdAt     DateTime        @default(now())
+  processedAt   DateTime?
+
+  room         Room?         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  meeting      Meeting?      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([roomId])
+  @@index([meetingId])
+  @@index([userId])
+  @@index([status])
+  @@index([organizationId])
+}
+
+enum RecordingStatus {
+  PROCESSING
+  READY
+  FAILED
+  DELETED
+}
+
+// ============================================
+// ENGAGEMENT (Polls & Questions)
+// ============================================
+
+model Poll {
+  id            String     @id @default(uuid())
+  roomId        String
+  title         String
+  options       Json       // Array of strings
+  status        PollStatus @default(ACTIVE)
+  allowMultiple Boolean    @default(false)
+  endsAt        DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  room  Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([roomId])
+  @@index([status])
+}
+
+enum PollStatus {
+  ACTIVE
+  ENDED
+  HIDDEN
+}
+
+model PollVote {
+  id          String   @id @default(uuid())
+  pollId      String
+  userId      String?
+  optionIndex Int
+  createdAt   DateTime @default(now())
+
+  poll Poll    @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([pollId])
+  @@index([userId])
+  @@unique([pollId, userId])
+}
+
+model Question {
+  id          String   @id @default(uuid())
+  roomId      String
+  userId      String?
+  content     String
+  isAnswered  Boolean  @default(false)
+  upvotes     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  room Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([roomId])
+  @@index([isAnswered])
+  @@index([createdAt])
+}
+
+// ============================================
+// ANALYTICS
+// ============================================
+
+model MeetingAnalytics {
+  id               String   @id @default(uuid())
+  meetingId        String   @unique
+  totalDuration    Int      // in seconds
+  peakParticipants Int
+  averageQuality   Float?   // 0-5 scale
+  chatMessages     Int
+  screenShares     Int
+  recordings       Int
+  createdAt        DateTime @default(now())
+
+  meeting Meeting @relation("MeetingToAnalytics", fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  eventType String
+  userId    String?
+  meetingId String?
+  roomId    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([userId])
+  @@index([meetingId])
+  @@index([roomId])
+  @@index([createdAt])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
 
 model Notification {
   id        String           @id @default(uuid())
@@ -207,56 +640,12 @@ enum NotificationType {
   MESSAGE_RECEIVED
   MEETING_SCHEDULED
   MEETING_CANCELLED
+  INVITATION
 }
 
-// ==================== RECORDINGS ====================
-
-model Recording {
-  id           String          @id @default(uuid())
-  meetingId    String
-  userId       String
-  url          String
-  thumbnailUrl String?
-  duration     Int // in seconds
-  size         Int // in bytes
-  status       RecordingStatus @default(PROCESSING)
-  createdAt    DateTime        @default(now())
-
-  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
-
-  @@index([meetingId])
-  @@index([userId])
-  @@index([status])
-}
-
-enum RecordingStatus {
-  PROCESSING
-  READY
-  FAILED
-  DELETED
-}
-
-// ==================== ANALYTICS ====================
-
-model MeetingAnalytics {
-  id               String   @id @default(uuid())
-  meetingId        String   @unique
-  totalDuration    Int // in seconds
-  peakParticipants Int
-  averageQuality   Float? // 0-5 scale
-  chatMessages     Int
-  screenShares     Int
-  recordings       Int
-  createdAt        DateTime @default(now())
-
-  meeting Meeting @relation("MeetingToAnalytics", fields: [meetingId], references: [id], onDelete: Cascade)
-
-  @@index([meetingId])
-  @@index([createdAt])
-}
-
-// ==================== AUDIT LOG ====================
+// ============================================
+// AUDIT LOG
+// ============================================
 
 model AuditLog {
   id         String   @id @default(uuid())
@@ -275,24 +664,91 @@ model AuditLog {
   @@index([resource, resourceId])
 }
 
-// ==================== ORGANIZATION ====================
+// ============================================
+// GDPR & COMPLIANCE
+// ============================================
 
-model Organization {
-  id               String           @id @default(uuid())
-  name             String
-  subscriptionTier SubscriptionTier @default(FREE)
-  maxParticipants  Int              @default(5)
-  maxRooms         Int              @default(1)
-  storageQuota     BigInt           @default(0) // in bytes
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+model DataExportRequest {
+  id        String            @id @default(uuid())
+  userId    String
+  status    DataExportStatus  @default(PENDING)
+  exportUrl String?
+  expiresAt DateTime?
+  createdAt DateTime          @default(now())
+  completedAt DateTime?
 
-  @@index([subscriptionTier])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
 }
 
-enum SubscriptionTier {
-  FREE
-  STARTER
-  PROFESSIONAL
-  ENTERPRISE
+enum DataExportStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  EXPIRED
+}
+
+model ConsentRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  consentType String
+  granted     Boolean  @default(true)
+  withdrawnAt DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([consentType])
+}
+
+// ============================================
+// PODCASTS
+// ============================================
+
+model Podcast {
+  id            String   @id @default(uuid())
+  userId        String
+  title         String
+  description   String?
+  coverImageUrl String?
+  isPublished   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodes Episode[]
+
+  @@index([userId])
+  @@index([isPublished])
+}
+
+model Episode {
+  id             String   @id @default(uuid())
+  podcastId      String
+  title          String
+  description    String?
+  audioUrl       String?
+  videoUrl       String?
+  duration       Int?     // in seconds
+  episodeNumber  Int
+  seasonNumber   Int      @default(1)
+  isPublished    Boolean  @default(false)
+  publishedAt    DateTime?
+  viewCount      Int      @default(0)
+  likeCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  podcast Podcast @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+
+  @@index([podcastId])
+  @@index([isPublished])
+  @@index([episodeNumber])
 }

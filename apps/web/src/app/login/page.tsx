@@ -99,19 +99,22 @@ export default function LoginPage() {
         return;
       }
 
-      // Call real authentication API
+      // Call authentication
       const result = await login(email, password);
 
       if (result.success) {
-        setSuccess('Login successful! Redirecting...');
-        // Router push happens in auth context
+        setSuccess('Login successful! Redirecting to dashboard...');
+        // Redirect to dashboard after short delay to show success message
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 500);
       } else {
         setError(result.error || 'Login failed. Please check your credentials.');
+        setIsLoading(false);
       }
     } catch (error: any) {
       console.error('Login error:', error);
       setError('An unexpected error occurred. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -232,9 +235,93 @@ export default function LoginPage() {
                 </div>
               )}
 
+              {/* Quick Demo Login */}
+              <div className="space-y-2">
+                <p className="text-xs text-center text-blue-300 font-medium">Quick Demo Access (No typing required)</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setEmail('admin@vantage.live');
+                      setPassword('@admin@123#');
+                      setIsLoading(true);
+                      setError('');
+                      const result = await login('admin@vantage.live', '@admin@123#');
+                      if (result.success) {
+                        setSuccess('Login successful! Redirecting...');
+                        setTimeout(() => router.push('/dashboard'), 300);
+                      } else {
+                        setError(result.error || 'Login failed');
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="px-3 py-2.5 rounded-lg bg-gradient-to-br from-blue-600/20 to-blue-700/20 border border-blue-500/40 hover:border-blue-400 transition-all text-white text-xs font-medium flex flex-col items-center gap-1 group disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLoading}
+                  >
+                    <Shield className="h-4 w-4 text-blue-400 group-hover:scale-110 transition-transform" />
+                    <span>Admin</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setEmail('host@vantage.live');
+                      setPassword('@host@123#');
+                      setIsLoading(true);
+                      setError('');
+                      const result = await login('host@vantage.live', '@host@123#');
+                      if (result.success) {
+                        setSuccess('Login successful! Redirecting...');
+                        setTimeout(() => router.push('/dashboard'), 300);
+                      } else {
+                        setError(result.error || 'Login failed');
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="px-3 py-2.5 rounded-lg bg-gradient-to-br from-purple-600/20 to-purple-700/20 border border-purple-500/40 hover:border-purple-400 transition-all text-white text-xs font-medium flex flex-col items-center gap-1 group disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLoading}
+                  >
+                    <Video className="h-4 w-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                    <span>Host</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setEmail('user@vantage.live');
+                      setPassword('@user@123#');
+                      setIsLoading(true);
+                      setError('');
+                      const result = await login('user@vantage.live', '@user@123#');
+                      if (result.success) {
+                        setSuccess('Login successful! Redirecting...');
+                        setTimeout(() => router.push('/dashboard'), 300);
+                      } else {
+                        setError(result.error || 'Login failed');
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="px-3 py-2.5 rounded-lg bg-gradient-to-br from-cyan-600/20 to-cyan-700/20 border border-cyan-500/40 hover:border-cyan-400 transition-all text-white text-xs font-medium flex flex-col items-center gap-1 group disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLoading}
+                  >
+                    <Users className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                    <span>User</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="relative py-2">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-blue-500/20"></div>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-[#020617] px-2 text-blue-300">Or sign in manually</span>
+                </div>
+              </div>
+
               {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <Input
+                  data-testid="login-email"
                   type="email"
                   label="Email Address"
                   placeholder="you@company.com"
@@ -247,6 +334,7 @@ export default function LoginPage() {
 
                 <div className="space-y-2">
                   <Input
+                    data-testid="login-password"
                     type={showPassword ? 'text' : 'password'}
                     label="Password"
                     placeholder="Enter your password"
@@ -268,22 +356,33 @@ export default function LoginPage() {
                 </div>
 
                 <Button
+                  data-testid="login-submit"
                   type="submit"
                   variant="primary"
-                  size="lg"
-                  className="w-full bg-blue-600 hover:bg-blue-500"
+                  size="xl"
+                  className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all"
                   disabled={isLoading}
                   isLoading={isLoading}
+                  glow
                 >
                   {isLoading ? (
-                    'Processing...'
+                    <>
+                      <span className="animate-pulse">Processing...</span>
+                    </>
                   ) : (
                     <>
-                      Sign In
-                      <ArrowRight className="h-5 w-5 ml-2" />
+                      <span className="text-lg">Sign In</span>
+                      <ArrowRight className="h-6 w-6 ml-2" />
                     </>
                   )}
                 </Button>
+
+                {/* Demo Mode Notice */}
+                <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
+                  <p className="text-xs text-blue-300">
+                    💡 <span className="font-semibold">Demo Mode:</span> API server not required. Use demo credentials below.
+                  </p>
+                </div>
               </form>
 
               {/* Divider */}

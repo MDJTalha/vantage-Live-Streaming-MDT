@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import OAuthService from '../services/OAuthService';
 import AuthService from '../services/AuthService';
-import DatabaseService from '../db/service';
+import { prisma } from '../db';
 
 const router = Router();
 
@@ -9,7 +9,7 @@ const router = Router();
  * GET /api/v1/auth/oauth/google
  * Initiate Google OAuth flow
  */
-router.get('/google', (req: Request, res: Response) => {
+router.get('/google', (_req: Request, res: Response) => {
   if (!OAuthService.isGoogleConfigured()) {
     res.status(503).json({
       success: false,
@@ -72,21 +72,26 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     const oauthUser = await OAuthService.verifyIdToken(tokens.idToken, 'google');
 
     // Find or create user in database
-    let user = await DatabaseService.getUserByEmail(oauthUser.email);
+    let user = await prisma.user.findUnique({
+      where: { email: oauthUser.email },
+    });
 
     if (!user) {
       // Create new user
       const passwordHash = await AuthService.hashPassword(
         AuthService.generateRefreshToken() // Random password
       );
-      
-      user = await DatabaseService.createUser({
-        email: oauthUser.email,
-        passwordHash,
-        name: oauthUser.name,
-        role: 'PARTICIPANT',
-        emailVerified: true, // OAuth emails are verified
+
+      user = await prisma.user.create({
+        data: {
+          email: oauthUser.email,
+          passwordHash,
+          name: oauthUser.name,
+          role: 'PARTICIPANT',
+        },
       });
+
+      if (!user) throw new Error('User creation failed');
     }
 
     // Generate VANTAGE tokens
@@ -97,13 +102,16 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     });
 
     // Store session
-    await DatabaseService.createSession({
-      userId: user.id,
-      tokenHash: AuthService.hashToken(vantageTokens.accessToken),
-      refreshTokenHash: AuthService.hashToken(vantageTokens.refreshToken),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      userAgent: req.headers['user-agent'],
-      ipAddress: req.ip,
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash: AuthService.hashToken(vantageTokens.accessToken),
+        refreshToken: crypto.randomUUID(),
+        refreshTokenHash: AuthService.hashToken(vantageTokens.refreshToken),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip,
+      },
     });
 
     // Redirect to frontend with tokens
@@ -132,7 +140,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
  * GET /api/v1/auth/oauth/microsoft
  * Initiate Microsoft OAuth flow
  */
-router.get('/microsoft', (req: Request, res: Response) => {
+router.get('/microsoft', (_req: Request, res: Response) => {
   if (!OAuthService.isMicrosoftConfigured()) {
     res.status(503).json({
       success: false,
@@ -188,20 +196,25 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
 
     const oauthUser = await OAuthService.verifyIdToken(tokens.idToken, 'microsoft');
 
-    let user = await DatabaseService.getUserByEmail(oauthUser.email);
+    let user = await prisma.user.findUnique({
+      where: { email: oauthUser.email },
+    });
 
     if (!user) {
       const passwordHash = await AuthService.hashPassword(
         AuthService.generateRefreshToken()
       );
-      
-      user = await DatabaseService.createUser({
-        email: oauthUser.email,
-        passwordHash,
-        name: oauthUser.name,
-        role: 'PARTICIPANT',
-        emailVerified: true,
+
+      user = await prisma.user.create({
+        data: {
+          email: oauthUser.email,
+          passwordHash,
+          name: oauthUser.name,
+          role: 'PARTICIPANT',
+        },
       });
+
+      if (!user) throw new Error('User creation failed');
     }
 
     const vantageTokens = AuthService.generateTokens({
@@ -210,13 +223,16 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    await DatabaseService.createSession({
-      userId: user.id,
-      tokenHash: AuthService.hashToken(vantageTokens.accessToken),
-      refreshTokenHash: AuthService.hashToken(vantageTokens.refreshToken),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      userAgent: req.headers['user-agent'],
-      ipAddress: req.ip,
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash: AuthService.hashToken(vantageTokens.accessToken),
+        refreshToken: crypto.randomUUID(),
+        refreshTokenHash: AuthService.hashToken(vantageTokens.refreshToken),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip,
+      },
     });
 
     const redirectUrl = new URL(

@@ -24,13 +24,13 @@ test.describe('VANTAGE Platform E2E Tests', () => {
       await page.goto(`${config.baseURL}/signup`);
       
       // Fill registration form
-      await page.fill('input[name="name"]', testUser.name);
-      await page.fill('input[name="email"]', randomEmail);
-      await page.fill('input[name="password"]', testUser.password);
-      
+      await page.fill('[data-testid="signup-name"]', testUser.name);
+      await page.fill('[data-testid="signup-email"]', randomEmail);
+      await page.fill('[data-testid="signup-password"]', testUser.password);
+
       // Submit form
-      await page.click('button[type="submit"]');
-      
+      await page.click('[data-testid="signup-submit"]');
+
       // Wait for navigation to dashboard
       await page.waitForURL(/\/dashboard/);
       
@@ -42,17 +42,17 @@ test.describe('VANTAGE Platform E2E Tests', () => {
     test('should login with valid credentials', async ({ page }) => {
       // Go to login page
       await page.goto(`${config.baseURL}/login`);
-      
+
       // Fill login form
-      await page.fill('input[name="email"]', testUser.email);
-      await page.fill('input[name="password"]', testUser.password);
-      
+      await page.fill('[data-testid="login-email"]', testUser.email);
+      await page.fill('[data-testid="login-password"]', testUser.password);
+
       // Submit form
-      await page.click('button[type="submit"]');
-      
+      await page.click('[data-testid="login-submit"]');
+
       // Wait for navigation to dashboard
       await page.waitForURL(/\/dashboard/);
-      
+
       // Verify user is logged in
       const url = page.url();
       expect(url).toContain('/dashboard');
@@ -61,13 +61,13 @@ test.describe('VANTAGE Platform E2E Tests', () => {
     test('should show error for invalid login', async ({ page }) => {
       // Go to login page
       await page.goto(`${config.baseURL}/login`);
-      
+
       // Fill with invalid credentials
-      await page.fill('input[name="email"]', 'invalid@example.com');
-      await page.fill('input[name="password"]', 'WrongPassword!');
-      
+      await page.fill('[data-testid="login-email"]', 'invalid@example.com');
+      await page.fill('[data-testid="login-password"]', 'WrongPassword!');
+
       // Submit form
-      await page.click('button[type="submit"]');
+      await page.click('[data-testid="login-submit"]');
       
       // Wait for error message
       await page.waitForSelector('text=/error|invalid|failed/i', { timeout: 5000 });
@@ -80,9 +80,9 @@ test.describe('VANTAGE Platform E2E Tests', () => {
     test('should logout successfully', async ({ page }) => {
       // Login first
       await page.goto(`${config.baseURL}/login`);
-      await page.fill('input[name="email"]', testUser.email);
-      await page.fill('input[name="password"]', testUser.password);
-      await page.click('button[type="submit"]');
+      await page.fill('[data-testid="login-email"]', testUser.email);
+      await page.fill('[data-testid="login-password"]', testUser.password);
+      await page.click('[data-testid="login-submit"]');
       await page.waitForURL(/\/dashboard/);
       
       // Logout
@@ -102,9 +102,9 @@ test.describe('VANTAGE Platform E2E Tests', () => {
     test.beforeEach(async ({ page }) => {
       // Login before each test
       await page.goto(`${config.baseURL}/login`);
-      await page.fill('input[name="email"]', testUser.email);
-      await page.fill('input[name="password"]', testUser.password);
-      await page.click('button[type="submit"]');
+      await page.fill('[data-testid="login-email"]', testUser.email);
+      await page.fill('[data-testid="login-password"]', testUser.password);
+      await page.click('[data-testid="login-submit"]');
       await page.waitForURL(/\/dashboard/);
     });
 
@@ -125,10 +125,10 @@ test.describe('VANTAGE Platform E2E Tests', () => {
     test('should create a new meeting', async ({ page }) => {
       // Click create meeting button
       await page.click('button:has-text("Create"), button:has-text("New Meeting")');
-      
+
       // Fill meeting form
       await page.fill('input[name="name"]', 'E2E Test Meeting');
-      
+
       // Submit form
       await page.click('button[type="submit"]');
       
@@ -148,11 +148,11 @@ test.describe('VANTAGE Platform E2E Tests', () => {
     test('should join a meeting room', async ({ page }) => {
       // Login and create a meeting first
       await page.goto(`${config.baseURL}/login`);
-      await page.fill('input[name="email"]', testUser.email);
-      await page.fill('input[name="password"]', testUser.password);
-      await page.click('button[type="submit"]');
+      await page.fill('[data-testid="login-email"]', testUser.email);
+      await page.fill('[data-testid="login-password"]', testUser.password);
+      await page.click('[data-testid="login-submit"]');
       await page.waitForURL(/\/dashboard/);
-      
+
       // Create meeting
       await page.click('button:has-text("Create")');
       await page.fill('input[name="name"]', 'E2E Room Test');

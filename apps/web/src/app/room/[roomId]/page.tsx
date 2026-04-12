@@ -19,6 +19,63 @@ export default function PremiumMeetingRoom() {
   const { user } = useAuth();
   const roomId = params.roomId as string;
 
+  // Join states
+  const [joinStep, setJoinStep] = useState<'name' | 'password' | 'waiting' | 'joined'>('joined');
+  const [guestName, setGuestName] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [meetingPassword, setMeetingPassword] = useState('');
+  const [waitingMessage, setWaitingMessage] = useState('Waiting for host to admit you...');
+  const [meetingInfo, setMeetingInfo] = useState<any>(null);
+  const [meetingRequiresPassword, setMeetingRequiresPassword] = useState(false);
+
+  // Check if user needs to provide name (not logged in)
+  useEffect(() => {
+    if (!user) {
+      setJoinStep('name');
+    } else {
+      // Check if meeting requires password
+      checkMeetingPassword();
+    }
+  }, [user]);
+
+  const checkMeetingPassword = async () => {
+    // In demo mode, check localStorage for meeting password requirement
+    const meetings = JSON.parse(localStorage.getItem('scheduledMeetings') || '[]');
+    const meeting = meetings.find((m: any) => m.code === roomId || m.id === roomId);
+    
+    if (meeting?.settings?.requirePassword) {
+      setMeetingRequiresPassword(true);
+      setJoinStep('password');
+    } else {
+      setJoinStep('joined');
+    }
+  };
+
+  const handleNameSubmit = () => {
+    if (!guestName.trim()) return;
+    // Check if meeting requires password
+    checkMeetingPassword();
+  };
+
+  const handlePasswordSubmit = () => {
+    // In demo mode, accept any password if meeting requires one
+    if (meetingRequiresPassword) {
+      setJoinStep('waiting');
+      // Simulate host approval after 2 seconds
+      setTimeout(() => {
+        setJoinStep('joined');
+      }, 2000);
+    }
+  };
+
+  const handleJoinSubmit = () => {
+    if (!guestName.trim()) return;
+    // In demo mode, skip password check if already validated
+    if (!meetingRequiresPassword) {
+      setJoinStep('joined');
+    }
+  };
+
   // Media states
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -46,6 +103,35 @@ export default function PremiumMeetingRoom() {
   // Chat
   const [messages, setMessages] = useState<Array<{ id: string; sender: string; content: string; time: string }>>([]);
   const [messageInput, setMessageInput] = useState('');
+
+  // Participants management
+  interface Participant {
+    id: string;
+    name: string;
+    isHost: boolean;
+    isMuted: boolean;
+    isVideoOn: boolean;
+  }
+
+  const [participants, setParticipants] = useState<Participant[]>([
+    { id: '1', name: user?.name || guestName || 'You', isHost: true, isMuted: !isAudioEnabled, isVideoOn: isVideoEnabled },
+    { id: '2', name: 'John Doe', isHost: false, isMuted: false, isVideoOn: true },
+    { id: '3', name: 'Sarah Smith', isHost: false, isMuted: true, isVideoOn: false },
+  ]);
+
+  const isHost = user?.role === 'ADMIN' || user?.role === 'HOST' || true; // In demo mode, current user is host
+
+  const toggleParticipantMute = (participantId: string) => {
+    if (!isHost) return;
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, isMuted: !p.isMuted } : p
+    ));
+  };
+
+  const removeParticipant = (participantId: string) => {
+    if (!isHost) return;
+    setParticipants(prev => prev.filter(p => p.id !== participantId));
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -332,6 +418,47 @@ export default function PremiumMeetingRoom() {
           <h2 className="text-xl font-semibold text-white mb-2">Joining Meeting</h2>
           <p className="text-slate-400 text-sm">Setting up your camera and microphone...</p>
           <p className="text-slate-500 text-xs mt-4 font-mono">{roomId}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Guest name prompt - for users not logged in
+  if (joinStep === 'name') {
+    return (
+      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center">
+        <div className="max-w-md w-full mx-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center mx-auto mb-4">
+                <Users className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Enter Your Name</h2>
+              <p className="text-slate-400 text-sm">Please provide your name to join the meeting</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Your Name</label>
+                <input
+                  type="text"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoinSubmit()}
+                  placeholder="e.g., John Smith"
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button onClick={() => router.push('/dashboard')} variant="outline" className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800">
+                  Cancel
+                </Button>
+                <Button onClick={handleJoinSubmit} disabled={!guestName.trim()} className="flex-1 bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 disabled:cursor-not-allowed">
+                  Join Meeting
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -684,65 +811,62 @@ export default function PremiumMeetingRoom() {
           <div className="p-4 border-b border-slate-800 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Users className="h-4 w-4 text-amber-400" />
-              Participants
+              Participants ({participants.length})
             </h3>
             <button onClick={() => setShowParticipants(false)} className="text-slate-400 hover:text-white">
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {/* Host (You) */}
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                <Crown className="h-4 w-4 text-white" />
+            {participants.map((participant) => (
+              <div key={participant.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  participant.isHost 
+                    ? 'bg-gradient-to-br from-amber-500 to-orange-600' 
+                    : 'bg-gradient-to-br from-blue-500 to-cyan-600'
+                }`}>
+                  {participant.isHost ? (
+                    <Crown className="h-4 w-4 text-white" />
+                  ) : (
+                    <span className="text-sm font-bold text-white">{participant.name.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-white">{participant.name}</p>
+                  <p className={`text-xs ${participant.isHost ? 'text-amber-400' : 'text-slate-400'}`}>
+                    {participant.isHost ? 'Host' : 'Participant'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* Audio status */}
+                  {participant.isMuted ? (
+                    <VolumeX className="h-4 w-4 text-red-400" />
+                  ) : (
+                    <Volume2 className="h-4 w-4 text-green-400" />
+                  )}
+                  
+                  {/* Host controls - only for host */}
+                  {isHost && !participant.isHost && (
+                    <>
+                      <button 
+                        onClick={() => toggleParticipantMute(participant.id)} 
+                        className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-amber-400 transition-colors" 
+                        title={participant.isMuted ? 'Unmute' : 'Mute'}
+                      >
+                        {participant.isMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                      </button>
+                      <button 
+                        onClick={() => removeParticipant(participant.id)} 
+                        className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors" 
+                        title="Remove"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-white">{user?.name || 'You'}</p>
-                <p className="text-xs text-amber-400">Host</p>
-              </div>
-              {isAudioEnabled ? (
-                <Volume2 className="h-4 w-4 text-green-400" />
-              ) : (
-                <VolumeX className="h-4 w-4 text-red-400" />
-              )}
-            </div>
-
-            {/* Sample Participants - In real implementation, these would come from WebSocket */}
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-                <span className="text-sm font-bold text-white">J</span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-white">John Doe</p>
-                <p className="text-xs text-slate-400">Participant</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-blue-400" title="Promote to Co-host">
-                  <Crown className="h-3.5 w-3.5" />
-                </button>
-                <button className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400" title="Remove">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-                <span className="text-sm font-bold text-white">S</span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-white">Sarah Smith</p>
-                <p className="text-xs text-slate-400">Participant</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-blue-400" title="Promote to Co-host">
-                  <Crown className="h-3.5 w-3.5" />
-                </button>
-                <button className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400" title="Remove">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}

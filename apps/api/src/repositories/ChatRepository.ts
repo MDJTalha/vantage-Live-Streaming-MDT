@@ -1,22 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, MessageType } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-export interface ChatMessage {
-  id: string;
-  roomId: string;
-  userId?: string;
-  guestName?: string;
-  content: string;
-  type: string;
-  parentId?: string;
-  createdAt: Date;
-  user?: {
-    id: string;
-    name: string;
-    avatarUrl?: string;
-  };
-}
 
 /**
  * Chat Repository
@@ -33,14 +17,14 @@ export class ChatRepository {
     content: string;
     type?: string;
     parentId?: string;
-  }): Promise<ChatMessage> {
+  }) {
     return prisma.chatMessage.create({
       data: {
         roomId: data.roomId,
         userId: data.userId,
         guestName: data.guestName,
         content: data.content,
-        type: data.type || 'TEXT',
+        type: (data.type || 'TEXT') as MessageType,
         parentId: data.parentId,
       },
       include: {
@@ -62,11 +46,11 @@ export class ChatRepository {
     limit?: number;
     before?: Date;
     after?: Date;
-  }): Promise<ChatMessage[]> {
+  }) {
     const { limit = 50, before, after } = options || {};
 
     const where: any = { roomId };
-    
+
     if (before) {
       where.createdAt = { ...where.createdAt, lt: before };
     }
@@ -104,7 +88,7 @@ export class ChatRepository {
   /**
    * Get message by ID
    */
-  static async getById(id: string): Promise<ChatMessage | null> {
+  static async getById(id: string) {
     return prisma.chatMessage.findUnique({
       where: { id },
       include: {
@@ -133,7 +117,7 @@ export class ChatRepository {
   /**
    * Delete message
    */
-  static async delete(id: string): Promise<ChatMessage> {
+  static async delete(id: string) {
     return prisma.chatMessage.delete({
       where: { id },
     });
@@ -160,7 +144,7 @@ export class ChatRepository {
   /**
    * Search messages
    */
-  static async search(roomId: string, query: string, limit: number = 20): Promise<ChatMessage[]> {
+  static async search(roomId: string, query: string, limit: number = 20) {
     return prisma.chatMessage.findMany({
       where: {
         roomId,

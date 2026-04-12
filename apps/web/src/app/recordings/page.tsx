@@ -24,7 +24,7 @@ import meetingService from '@/services/MeetingService';
 
 export default function RecordingsLibrary() {
   const router = useRouter();
-  useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [recordings, setRecordings] = useState<Array<Recording & { meetingName?: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,6 +32,22 @@ export default function RecordingsLibrary() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackUrl, setPlaybackUrl] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Auth guard - redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
+
+  // Show loading or redirect state
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500/20 border-t-blue-500" />
+      </div>
+    );
+  }
 
   useEffect(() => {
     loadRecordings();

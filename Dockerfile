@@ -1,7 +1,7 @@
 # ============================================
 # VANTAGE API - Production Dockerfile
 # ============================================
-FROM node:20.12.0-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps

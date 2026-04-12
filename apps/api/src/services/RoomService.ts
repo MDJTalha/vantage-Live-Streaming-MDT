@@ -17,15 +17,15 @@ export interface RoomSettings {
 
 export interface RoomData {
   id: string;
-  roomCode: string;
+  code: string;
   name: string;
   description?: string;
   hostId: string;
   status: RoomStatus;
-  settings: RoomSettings;
   createdAt: Date;
   startedAt?: Date;
   endedAt?: Date;
+  password?: string;
   host?: {
     id: string;
     name: string;
@@ -38,12 +38,12 @@ export interface RoomData {
 export interface RoomParticipantData {
   id: string;
   userId?: string;
-  guestName?: string;
+  name: string;
   role: RoomRole;
   joinedAt: Date;
   isSpeaking: boolean;
-  isVideoEnabled: boolean;
-  isAudioEnabled: boolean;
+  isVideoOff: boolean;
+  isMuted: boolean;
   user?: {
     id: string;
     name: string;
@@ -66,32 +66,16 @@ export class RoomService {
     settings?: Partial<RoomSettings>;
     password?: string;
   }): Promise<RoomData> {
-    const roomCode = this.generateRoomCode();
-    const passwordHash = data.password ? await bcrypt.hash(data.password, 10) : undefined;
-
-    const defaultSettings: RoomSettings = {
-      maxParticipants: 100,
-      allowChat: true,
-      allowScreenShare: true,
-      allowRecording: true,
-      requirePassword: !!data.password,
-      requireApproval: false,
-      enableBreakoutRooms: true,
-      enableWaitingRoom: false,
-    };
+    const code = this.generateRoomCode();
+    const password = data.password ? await bcrypt.hash(data.password, 10) : undefined;
 
     const room = await prisma.room.create({
       data: {
-        roomCode,
+        code,
         name: data.name,
-        description: data.description,
         hostId: data.hostId,
-        passwordHash,
-        settings: {
-          ...defaultSettings,
-          ...data.settings,
-        },
-        status: 'SCHEDULED',
+        password,
+        status: 'SCHEDULED' as const,
       },
       include: {
         host: {
@@ -110,19 +94,20 @@ export class RoomService {
       data: {
         roomId: room.id,
         userId: data.hostId,
-        role: 'HOST',
+        name: '',
+        role: 'HOST' as RoomRole,
       },
     });
 
-    return room as RoomData;
+    return room as unknown as RoomData;
   }
 
   /**
    * Get room by code
    */
-  static async getByCode(roomCode: string): Promise<RoomData | null> {
+  static async getByCode(code: string): Promise<RoomData | null> {
     return prisma.room.findUnique({
-      where: { roomCode },
+      where: { code },
       include: {
         host: {
           select: {
@@ -145,7 +130,7 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomData | null>;
+    }) as unknown as Promise<RoomData | null>;
   }
 
   /**
@@ -176,7 +161,7 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomData | null>;
+    }) as unknown as Promise<RoomData | null>;
   }
 
   /**
@@ -185,12 +170,12 @@ export class RoomService {
   static async verifyPassword(roomId: string, password: string): Promise<boolean> {
     const room = await prisma.room.findUnique({
       where: { id: roomId },
-      select: { passwordHash: true },
+      select: { password: true },
     });
 
-    if (!room?.passwordHash) return true; // No password required
+    if (!room?.password) return true; // No password required
 
-    return bcrypt.compare(password, room.passwordHash);
+    return bcrypt.compare(password, room.password);
   }
 
   /**
@@ -205,9 +190,8 @@ export class RoomService {
       data: {
         roomId,
         userId: data.userId,
-        guestName: data.guestName,
-        guestEmail: data.guestEmail,
-        role: 'PARTICIPANT',
+        name: data.guestName || '',
+        role: 'PARTICIPANT' as RoomRole,
       },
       include: {
         user: {
@@ -220,7 +204,7 @@ export class RoomService {
       },
     });
 
-    return participant as RoomParticipantData;
+    return participant as unknown as RoomParticipantData;
   }
 
   /**
@@ -232,8 +216,8 @@ export class RoomService {
       data: {
         leftAt: new Date(),
         isSpeaking: false,
-        isVideoEnabled: false,
-        isAudioEnabled: false,
+        isVideoOff: false,
+        isMuted: false,
       },
     });
   }
@@ -245,7 +229,7 @@ export class RoomService {
     return prisma.room.update({
       where: { id: roomId },
       data: {
-        status: 'ACTIVE',
+        status: 'ACTIVE' as const,
         startedAt: new Date(),
       },
       include: {
@@ -261,7 +245,7 @@ export class RoomService {
           where: { leftAt: null },
         },
       },
-    }) as Promise<RoomData>;
+    }) as unknown as Promise<RoomData>;
   }
 
   /**
@@ -274,15 +258,15 @@ export class RoomService {
       data: {
         leftAt: new Date(),
         isSpeaking: false,
-        isVideoEnabled: false,
-        isAudioEnabled: false,
+        isVideoOff: false,
+        isMuted: false,
       },
     });
 
     return prisma.room.update({
       where: { id: roomId },
       data: {
-        status: 'ENDED',
+        status: 'ENDED' as const,
         endedAt: new Date(),
       },
       include: {
@@ -295,22 +279,21 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomData>;
+    }) as unknown as Promise<RoomData>;
   }
 
   /**
    * Update room settings
    */
   static async updateSettings(roomId: string, settings: Partial<RoomSettings>): Promise<RoomData> {
-    const room = await prisma.room.findUnique({ where: { id: roomId } });
-    
     return prisma.room.update({
       where: { id: roomId },
       data: {
-        settings: {
-          ...(room?.settings as any),
-          ...settings,
-        },
+        maxParticipants: settings.maxParticipants,
+        allowChat: settings.allowChat,
+        allowScreenShare: settings.allowScreenShare,
+        allowRecording: settings.allowRecording,
+        enableWaitingRoom: settings.enableWaitingRoom,
       },
       include: {
         host: {
@@ -334,7 +317,7 @@ export class RoomService {
   static async promoteToCohost(participantId: string): Promise<RoomParticipantData> {
     return prisma.roomParticipant.update({
       where: { id: participantId },
-      data: { role: 'COHOST' },
+      data: { role: 'CO_HOST' as RoomRole },
       include: {
         user: {
           select: {
@@ -344,7 +327,7 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomParticipantData>;
+    }) as unknown as RoomParticipantData;
   }
 
   /**
@@ -353,7 +336,7 @@ export class RoomService {
   static async demoteToParticipant(participantId: string): Promise<RoomParticipantData> {
     return prisma.roomParticipant.update({
       where: { id: participantId },
-      data: { role: 'PARTICIPANT' },
+      data: { role: 'PARTICIPANT' as RoomRole },
       include: {
         user: {
           select: {
@@ -363,7 +346,7 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomParticipantData>;
+    }) as unknown as RoomParticipantData;
   }
 
   /**
@@ -375,8 +358,8 @@ export class RoomService {
       data: {
         leftAt: new Date(),
         isSpeaking: false,
-        isVideoEnabled: false,
-        isAudioEnabled: false,
+        isVideoOff: false,
+        isMuted: false,
       },
     });
   }
@@ -396,7 +379,7 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomParticipantData | null>;
+    }) as unknown as Promise<RoomParticipantData | null>;
   }
 
   /**
@@ -417,7 +400,7 @@ export class RoomService {
           },
         },
       },
-    }) as Promise<RoomParticipantData | null>;
+    }) as unknown as Promise<RoomParticipantData | null>;
   }
 
   /**
@@ -436,7 +419,7 @@ export class RoomService {
         },
       },
       orderBy: { joinedAt: 'asc' },
-    }) as Promise<RoomParticipantData[]>;
+    }) as unknown as Promise<RoomParticipantData[]>;
   }
 
   /**
@@ -454,15 +437,14 @@ export class RoomService {
   static async isRoomFull(roomId: string): Promise<boolean> {
     const room = await prisma.room.findUnique({
       where: { id: roomId },
-      select: { settings: true },
+      select: { maxParticipants: true },
     });
 
     if (!room) return true;
 
-    const settings = room.settings as unknown as RoomSettings;
     const count = await this.getParticipantCount(roomId);
 
-    return count >= settings.maxParticipants;
+    return count >= room.maxParticipants;
   }
 
   /**
@@ -497,7 +479,7 @@ export class RoomService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'desc' as const },
     }) as unknown as Promise<RoomData[]>;
   }
 
@@ -506,7 +488,7 @@ export class RoomService {
    */
   static async getActiveRooms(): Promise<RoomData[]> {
     return prisma.room.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE' as const },
       include: {
         host: {
           select: {

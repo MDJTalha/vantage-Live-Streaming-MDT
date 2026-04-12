@@ -1,7 +1,6 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-// @ts-ignore - socket.io-client types not available
 import { io, Socket } from 'socket.io-client';
 
 // ============================================
@@ -74,21 +73,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
-  const [users, setUsers] = useState<User[]>([
-    { id: 'user-1', name: 'You', online: true },
-    { id: 'user-2', name: 'Demo User', online: true },
-  ]);
-  const [currentUserId, setCurrentUserId] = useState<string>('user-1');
   const [wsAvailable, setWsAvailable] = useState(false);
+
+  // Initialize current user from localStorage
+  const initializeCurrentUser = (): User => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        return {
+          id: user.id || 'unknown',
+          name: user.name || 'User',
+          email: user.email,
+          online: true,
+        };
+      }
+    } catch (e) {
+      console.error('Error loading user from localStorage:', e);
+    }
+    return { id: 'anonymous', name: 'Guest', online: true };
+  };
+
+  const [currentUser, setCurrentUser] = useState<User>(initializeCurrentUser);
+  const [users, setUsers] = useState<User[]>([currentUser]); // Only show actual logged-in users
+  const currentUserId = currentUser.id;
 
   // Connect to Socket.IO - gracefully handle missing WebSocket server
   const connect = useCallback(() => {
-    // Don't try to connect if WebSocket server is not available
-    if (!wsAvailable) {
-      console.log('⚠️ WebSocket server not available, using local chat mode');
-      return;
-    }
-
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     
     // Get user from localStorage
@@ -186,6 +197,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     newSocket.on('error', (error: { message: string }) => {
       console.error('❌ Socket error:', error);
+    });
+
+    newSocket.on('connect_error', (error: Error) => {
+      console.error('❌ WebSocket connection failed:', error.message);
+      setWsAvailable(false);
+      setIsConnected(false);
+      console.log('⚠️ Falling back to local chat mode');
     });
 
     setSocket(newSocket);

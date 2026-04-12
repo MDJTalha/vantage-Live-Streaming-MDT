@@ -25,7 +25,71 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// C-06 FIX: API URL required in production — no localhost fallback
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+if (!API_URL && process.env.NODE_ENV === 'production') {
+  console.error('❌ NEXT_PUBLIC_API_URL is not configured');
+}
+const BASE_API = API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
+// C-06 FIX: Demo mode ONLY enabled via explicit env var
+const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+
+/**
+ * Demo mode users for local development ONLY
+ * Gated behind NEXT_PUBLIC_DEMO_MODE=true environment variable
+ */
+const DEMO_USERS: Record<string, { password: string; user: User }> = DEMO_MODE_ENABLED ? {
+  'admin@vantage.live': {
+    password: '@admin@123#',
+    user: {
+      id: 'admin-001',
+      email: 'admin@vantage.live',
+      name: 'VANTAGE Admin',
+      role: 'ADMIN',
+      emailVerified: true,
+      mfaEnabled: false,
+      lastLoginAt: new Date().toISOString(),
+    }
+  },
+  'host@vantage.live': {
+    password: '@host@123#',
+    user: {
+      id: 'host-001',
+      email: 'host@vantage.live',
+      name: 'Demo Host',
+      role: 'HOST',
+      emailVerified: true,
+      mfaEnabled: false,
+      lastLoginAt: new Date().toISOString(),
+    }
+  },
+  'user@vantage.live': {
+    password: '@user@123#',
+    user: {
+      id: 'user-001',
+      email: 'user@vantage.live',
+      name: 'Demo User',
+      role: 'PARTICIPANT',
+      emailVerified: true,
+      mfaEnabled: false,
+      lastLoginAt: new Date().toISOString(),
+    }
+  }
+} : {};
+
+/**
+ * Check if a password matches a demo user (only when demo mode enabled)
+ */
+function checkDemoLogin(email: string, password: string): User | null {
+  if (!DEMO_MODE_ENABLED) return null;
+
+  const demoUser = DEMO_USERS[email.toLowerCase()];
+  if (demoUser && demoUser.password === password) {
+    return demoUser.user;
+  }
+  return null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -37,18 +101,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('accessToken');
 
-    if (storedUser) {
+    if (storedUser && token) {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         setIsLoading(false);
       } catch {
         localStorage.removeItem('user');
-        if (token) {
-          fetchUser(token);
-        } else {
-          setIsLoading(false);
-        }
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        fetchUser(token);
       }
     } else if (token) {
       fetchUser(token);
@@ -58,8 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchUser(token: string) {
+    if (!BASE_API) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/me`, {
+      const response = await fetch(`${BASE_API}/api/v1/auth/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -69,7 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const userData = await response.json();
-        // Handle both { success: true, data: {...} } and direct object responses
         const user = userData.success ? (userData.data || userData) : userData;
         setUser(user);
         localStorage.setItem('user', JSON.stringify(user));
@@ -82,25 +148,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Error fetching user:', error);
-      // If API is unavailable, check for stored user
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch {
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
+      // C-06 FIX: No silent fallback — if API is down, user is not authenticated
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   }
 
   async function login(email: string, password: string): Promise<{ success: boolean; error?: string }> {
+    // C-06 FIX: Demo login ONLY when explicitly enabled
+    if (DEMO_MODE_ENABLED) {
+      const demoUser = checkDemoLogin(email, password);
+      if (demoUser) {
+        const mockAccessToken = `demo-access-token-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const mockRefreshToken = `demo-refresh-token-${Date.now()}`;
+
+        localStorage.setItem('accessToken', mockAccessToken);
+        localStorage.setItem('refreshToken', mockRefreshToken);
+        setUser(demoUser);
+        localStorage.setItem('user', JSON.stringify(demoUser));
+
+        console.log('✅ Demo login successful:', demoUser.email);
+        return { success: true };
+      }
+    }
+
+    // C-06 FIX: API login — fail hard if no API URL configured
+    if (!BASE_API) {
+      return { success: false, error: 'API is not configured. Set NEXT_PUBLIC_API_URL.' };
+    }
+
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+      const response = await fetch(`${BASE_API}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -111,7 +193,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
 
       if (response.ok) {
-        // Handle both { user, accessToken, refreshToken } and { data: { user, tokens } } formats
         const user = data.user || (data.data && data.data.user);
         const accessToken = data.accessToken || (data.data && data.data.tokens && data.data.tokens.accessToken);
         const refreshToken = data.refreshToken || (data.data && data.data.tokens && data.data.tokens.refreshToken);
@@ -120,18 +201,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: 'Invalid response from server' };
         }
 
-        // Save tokens
         localStorage.setItem('accessToken', accessToken);
         if (refreshToken) {
           localStorage.setItem('refreshToken', refreshToken);
         }
 
-        // Save user
         setUser(user);
         localStorage.setItem('user', JSON.stringify(user));
-
-        // Redirect to dashboard
-        router.push('/dashboard');
 
         return { success: true };
       } else {
@@ -139,13 +215,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      return { success: false, error: 'Network error. Please try again.' };
+      // C-06 FIX: No fallback to demo — return clear error
+      return { success: false, error: 'Unable to connect to authentication server' };
     }
   }
 
   async function register(email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> {
+    // C-06 FIX: API registration — fail hard if no API URL configured
+    if (!BASE_API) {
+      return { success: false, error: 'API is not configured. Set NEXT_PUBLIC_API_URL.' };
+    }
+
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/register`, {
+      const response = await fetch(`${BASE_API}/api/v1/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,7 +238,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
 
       if (response.ok) {
-        // Handle both response formats
         const user = data.user || (data.data && data.data.user);
         const accessToken = data.accessToken || (data.data && data.data.tokens && data.data.tokens.accessToken);
         const refreshToken = data.refreshToken || (data.data && data.data.tokens && data.data.tokens.refreshToken);
@@ -165,17 +246,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: 'Invalid response from server' };
         }
 
-        // Save tokens
         localStorage.setItem('accessToken', accessToken);
         if (refreshToken) {
           localStorage.setItem('refreshToken', refreshToken);
         }
 
-        // Save user
         setUser(user);
         localStorage.setItem('user', JSON.stringify(user));
 
-        // Redirect to dashboard
         router.push('/dashboard');
 
         return { success: true };
@@ -184,29 +262,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       console.error('Registration error:', error);
-      return { success: false, error: 'Network error. Please try again.' };
+      // C-06 FIX: No demo mode fallback — return clear error
+      return { success: false, error: 'Unable to connect to registration server' };
     }
   }
 
   async function logout() {
     try {
-      // Call logout endpoint to invalidate refresh token
       const refreshToken = localStorage.getItem('refreshToken');
       const accessToken = localStorage.getItem('accessToken');
-      if (refreshToken && accessToken) {
-        await fetch(`${API_URL}/api/v1/auth/logout`, {
+
+      // C-06 FIX: Only call API logout for non-demo tokens when API is available
+      if (refreshToken && accessToken && !accessToken.startsWith('demo-') && BASE_API) {
+        await fetch(`${BASE_API}/api/v1/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ refreshToken }),
-        }).catch(() => {}); // Ignore errors during logout
+        }).catch(() => {});
       }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear local state
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
@@ -216,11 +295,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function updateUser(data: Partial<User>) {
+    if (!BASE_API) return;
+
     try {
       const accessToken = localStorage.getItem('accessToken');
+
+      // C-06 FIX: Demo tokens update locally only
+      if (accessToken?.startsWith('demo-')) {
+        const updatedUser = { ...user, ...data };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        return;
+      }
+
       if (!accessToken) return;
 
-      const response = await fetch(`${API_URL}/api/v1/auth/me`, {
+      const response = await fetch(`${BASE_API}/api/v1/auth/me`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${accessToken}`,

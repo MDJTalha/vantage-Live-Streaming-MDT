@@ -91,6 +91,16 @@ const logger = winston.createLogger({
           }),
         ]
       : []),
+
+    // Console transport for production (JSON for container log collection)
+    ...(config.environment === 'production'
+      ? [
+          new winston.transports.Console({
+            format: logFormat, // JSON format
+            stderrLevels: ['error'],
+          }),
+        ]
+      : []),
   ],
 });
 

@@ -1,6 +1,3 @@
-import { spawn } from 'child_process';
-import { createWriteStream } from 'fs';
-import { pipeline } from 'stream/promises';
 import RecordingService from './RecordingService';
 
 export interface RecordingConfig {
@@ -132,7 +129,6 @@ export class MediaProcessorService {
 
 class RecordingProcess {
   public duration: number = 0;
-  private process?: any;
   private startTime: number = 0;
 
   constructor(
@@ -156,7 +152,6 @@ class RecordingProcess {
 }
 
 class StreamProcess {
-  private process?: any;
   private startTime: number = 0;
 
   constructor(
@@ -170,7 +165,7 @@ class StreamProcess {
     
     // In production, use ffmpeg to stream to RTMP
     // Example: ffmpeg -i <source> -c:v libx264 -c:a aac -f flvm <rtmp-url>/<stream-key>
-    const rtmpDestination = `${this.target.rtmpUrl}/${this.target.streamKey}`;
+    // const _rtmpDestination = `${this.target.rtmpUrl}/${this.target.streamKey}`;
     console.log(`Starting stream ${this.id} to ${this.target.platform}`);
   }
 

@@ -1,6 +1,6 @@
 /**
- * Meeting Service - Production Ready with Prisma
- * Connects to PostgreSQL via Prisma ORM
+ * Meeting Service — Production Ready
+ * C-06 FIX: No localStorage fallbacks — all calls go to API
  */
 
 export interface Meeting {
@@ -9,7 +9,7 @@ export interface Meeting {
   code: string;
   hostId: string;
   hostName?: string;
-  status: 'active' | 'scheduled' | 'ended';
+  status: 'SCHEDULED' | 'ACTIVE' | 'ENDED' | 'CANCELLED';
   participants: number;
   scheduledAt?: string;
   duration?: number;
@@ -28,7 +28,7 @@ export interface Meeting {
 export interface MeetingMessage {
   id: string;
   meetingCode: string;
-  type: 'reschedule' | 'not-joining' | 'general';
+  type: string;
   from: string;
   message: string;
   timestamp: string;
@@ -38,7 +38,7 @@ export interface MeetingMessage {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'meeting-starting' | 'participant-joined' | 'recording-ready' | 'message-received';
+  type: string;
   title: string;
   message: string;
   meetingCode?: string;
@@ -56,157 +56,220 @@ export interface Recording {
   createdAt: string;
 }
 
-class MeetingService {
-  private apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// C-06 FIX: Required API URL — no localhost fallback
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+if (!API_URL && process.env.NODE_ENV === 'production') {
+  console.error('❌ NEXT_PUBLIC_API_URL is not configured');
+}
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('accessToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+}
+
+class MeetingService {
   // ==================== MEETINGS ====================
 
   async getAllMeetings(hostId?: string): Promise<Meeting[]> {
-    try {
-      const url = hostId 
-        ? `${this.apiUrl}/api/v1/meetings?hostId=${hostId}`
-        : `${this.apiUrl}/api/v1/meetings`;
+    if (!API_URL) throw new Error('API_URL not configured');
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
+    const url = hostId
+      ? `${API_URL}/api/v1/meetings?hostId=${hostId}`
+      : `${API_URL}/api/v1/meetings`;
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch meetings');
-      }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
 
-      const data = await response.json();
-      return data.meetings || data;
-    } catch (error) {
-      console.error('Error fetching meetings:', error);
-      return [];
+    if (!response.ok) {
+      throw new Error(`Failed to fetch meetings: ${response.status} ${response.statusText}`);
     }
+
+    const data = await response.json();
+    return data.meetings || data.data || data;
   }
 
-  async getMeetingByCode(code: string): Promise<Meeting | null> {
-    try {
-      const response = await fetch(`${this.apiUrl}/api/v1/meetings/${code}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
+  async getMeeting(code: string): Promise<Meeting | null> {
+    if (!API_URL) throw new Error('API_URL not configured');
 
-      if (!response.ok) {
-        return null;
-      }
+    const response = await fetch(`${API_URL}/api/v1/meetings/${code}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
 
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching meeting:', error);
-      return null;
-    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Failed to fetch meeting: ${response.status}`);
+
+    const data = await response.json();
+    return data.meeting || data.data;
   }
 
-  async createMeeting(_data: {
+  async createMeeting(meeting: {
     name: string;
+    description?: string;
     scheduledAt?: string;
     duration?: number;
     maxParticipants?: number;
-    password?: string;
-    allowChat?: boolean;
-    allowScreenShare?: boolean;
-    allowRecording?: boolean;
-    enableWaitingRoom?: boolean;
-  }): Promise<Meeting | null> {
-    try {
-      const response: Response = await fetch(`${this.apiUrl}/api/v1/meetings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
-        body: JSON.stringify(_data)
-      });
+    settings?: {
+      allowChat?: boolean;
+      allowScreenShare?: boolean;
+      allowRecording?: boolean;
+      requirePassword?: boolean;
+      enableWaitingRoom?: boolean;
+    };
+  }): Promise<Meeting> {
+    if (!API_URL) throw new Error('API_URL not configured');
 
-      if (!response.ok) {
-        throw new Error('Failed to create meeting');
-      }
+    const response = await fetch(`${API_URL}/api/v1/meetings`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(meeting),
+    });
 
-      const responseData = await response.json();
-      return responseData;
-    } catch (error) {
-      console.error('Error creating meeting:', error);
-      return null;
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to create meeting' }));
+      throw new Error(error.error || 'Failed to create meeting');
     }
+
+    const data = await response.json();
+    return data.meeting || data.data;
   }
 
-  async updateMeeting(code: string, _data: Partial<Meeting>): Promise<Meeting | null> {
-    try {
-      const response = await fetch(`${this.apiUrl}/api/v1/meetings/${code}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
-        body: JSON.stringify(_data)
-      });
+  async updateMeeting(code: string, updates: Partial<Meeting>): Promise<Meeting> {
+    if (!API_URL) throw new Error('API_URL not configured');
 
-      if (!response.ok) {
-        return null;
-      }
+    const response = await fetch(`${API_URL}/api/v1/meetings/${code}`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    });
 
-      const responseData = await response.json();
-      return responseData;
-    } catch (error) {
-      console.error('Error updating meeting:', error);
-      return null;
-    }
+    if (!response.ok) throw new Error(`Failed to update meeting: ${response.status}`);
+
+    const data = await response.json();
+    return data.meeting || data.data;
   }
 
-  async deleteMeeting(code: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.apiUrl}/api/v1/meetings/${code}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
+  async deleteMeeting(code: string): Promise<void> {
+    if (!API_URL) throw new Error('API_URL not configured');
 
-      return response.ok;
-    } catch (error) {
-      console.error('Error deleting meeting:', error);
-      return false;
-    }
+    const response = await fetch(`${API_URL}/api/v1/meetings/${code}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error(`Failed to delete meeting: ${response.status}`);
   }
 
-  async getStatistics(hostId: string) {
-    try {
-      const response = await fetch(`${this.apiUrl}/api/v1/meetings/statistics?hostId=${hostId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
+  // ==================== MESSAGES ====================
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch statistics');
-      }
+  async getMeetingMessages(meetingCode: string): Promise<MeetingMessage[]> {
+    if (!API_URL) throw new Error('API_URL not configured');
 
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching statistics:', error);
-      return {
-        totalMeetings: 0,
-        activeMeetings: 0,
-        scheduledMeetings: 0,
-        totalParticipants: 0,
-        totalRecordings: 0,
-        storageUsed: 0,
-      };
-    }
+    const response = await fetch(`${API_URL}/api/v1/chat/${meetingCode}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch messages: ${response.status}`);
+
+    const data = await response.json();
+    return data.messages || data.data || [];
+  }
+
+  async sendMeetingMessage(meetingCode: string, content: string): Promise<MeetingMessage> {
+    if (!API_URL) throw new Error('API_URL not configured');
+
+    const response = await fetch(`${API_URL}/api/v1/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ meetingId: meetingCode, content }),
+    });
+
+    if (!response.ok) throw new Error(`Failed to send message: ${response.status}`);
+
+    const data = await response.json();
+    return data.message || data.data;
+  }
+
+  // ==================== RECORDINGS ====================
+
+  async getRecordings(meetingCode?: string): Promise<Recording[]> {
+    if (!API_URL) throw new Error('API_URL not configured');
+
+    const url = meetingCode
+      ? `${API_URL}/api/v1/recordings?meetingId=${meetingCode}`
+      : `${API_URL}/api/v1/recordings`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch recordings: ${response.status}`);
+
+    const data = await response.json();
+    return data.recordings || data.data || [];
+  }
+
+  // ==================== NOTIFICATIONS ====================
+
+  async getNotifications(): Promise<Notification[]> {
+    if (!API_URL) throw new Error('API_URL not configured');
+
+    // Using meetings endpoint which returns notifications in the full response
+    const response = await fetch(`${API_URL}/api/v1/meetings`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch notifications: ${response.status}`);
+
+    const data = await response.json();
+    return data.notifications || data.data?.notifications || [];
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    if (!API_URL) throw new Error('API_URL not configured');
+
+    // Notifications are typically marked read via a PATCH or dedicated endpoint
+    // Adjust based on your API structure
+    const response = await fetch(`${API_URL}/api/v1/notifications/${notificationId}/read`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error(`Failed to mark notification read: ${response.status}`);
+  }
+
+  // ==================== STATISTICS ====================
+
+  async getMeetingStatistics(): Promise<{
+    totalMeetings: number;
+    totalParticipants: number;
+    totalDuration: number;
+    upcomingMeetings: number;
+  }> {
+    if (!API_URL) throw new Error('API_URL not configured');
+
+    const response = await fetch(`${API_URL}/api/v1/analytics/dashboard`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch statistics: ${response.status}`);
+
+    const data = await response.json();
+    return data.statistics || data.data || {
+      totalMeetings: 0,
+      totalParticipants: 0,
+      totalDuration: 0,
+      upcomingMeetings: 0,
+    };
   }
 }
 

@@ -64,8 +64,8 @@ export class AnalyticsRepository {
 
     // Aggregate metrics
     const totalMeetings = rooms.length;
-    const totalParticipants = rooms.reduce((sum, room) => sum + 0, 0);
-    const totalDuration = rooms.reduce((sum, room) => sum + 0, 0);
+    const totalParticipants = rooms.reduce((sum, _room) => sum + 0, 0);
+    const totalDuration = rooms.reduce((sum, _room) => sum + 0, 0);
     const storageUsed = 0;
 
     // Meetings by day
@@ -153,12 +153,19 @@ export class AnalyticsRepository {
    * Update peak participants
    */
   static async updatePeakParticipants(roomId: string, count: number): Promise<void> {
-    await prisma.roomAnalytics.update({
+    const analytics = await prisma.roomAnalytics.findUnique({
       where: { roomId },
-      data: {
-        peakParticipants: { max: count },
-      },
+      select: { peakParticipants: true },
     });
+
+    if (!analytics || count > analytics.peakParticipants) {
+      await prisma.roomAnalytics.update({
+        where: { roomId },
+        data: {
+          peakParticipants: { set: count },
+        },
+      });
+    }
   }
 
   /**

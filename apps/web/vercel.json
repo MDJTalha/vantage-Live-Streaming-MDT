@@ -5,6 +5,7 @@
   "outputDirectory": "apps/web/.next",
   "installCommand": "npm ci --legacy-peer-deps",
   "framework": "nextjs",
+  "nodeVersion": "20",
   "regions": ["iad1"],
   "env": {
     "NEXT_PUBLIC_API_URL": "@next-public-api-url",

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -37,11 +37,17 @@ export class UserRepository {
     email: string;
     passwordHash: string;
     name: string;
-    role?: string;
+    role?: Role;
     emailVerified?: boolean;
   }) {
     return prisma.user.create({
-      data,
+      data: {
+        email: data.email,
+        passwordHash: data.passwordHash,
+        name: data.name,
+        role: (data.role || 'PARTICIPANT') as Role,
+        emailVerified: data.emailVerified,
+      },
       select: {
         id: true,
         email: true,

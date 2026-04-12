@@ -3,6 +3,29 @@
  * Validates all required environment variables at startup
  */
 
+// Load environment variables from .env.local file
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Try to load .env.local from various possible locations
+const envPaths = [
+  path.resolve(process.cwd(), '.env.local'),
+  path.resolve(process.cwd(), '..', '.env.local'),
+  path.resolve(process.cwd(), '..', '..', '.env.local'),
+];
+
+for (const envPath of envPaths) {
+  try {
+    const result = dotenv.config({ path: envPath });
+    if (result.parsed) {
+      console.log(`✅ Loaded environment variables from ${envPath}`);
+      break;
+    }
+  } catch (error) {
+    // Continue to next path
+  }
+}
+
 const isProd = process.env.NODE_ENV === 'production';
 
 /**

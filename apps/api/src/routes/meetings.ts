@@ -13,7 +13,7 @@ router.get('/', AuthMiddleware.requireAuth, async (req: Request, res: Response) 
       where: hostId ? { hostId: hostId as string } : {},
       include: {
         _count: {
-          select: { participants: true }
+          select: { participations: true }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -24,9 +24,8 @@ router.get('/', AuthMiddleware.requireAuth, async (req: Request, res: Response) 
       name: meeting.name,
       code: meeting.code,
       hostId: meeting.hostId,
-      hostName: meeting.hostName,
       status: meeting.status,
-      participants: meeting._count.participants,
+      participants: meeting._count.participations,
       scheduledAt: meeting.scheduledAt,
       duration: meeting.duration,
       maxParticipants: meeting.maxParticipants,
@@ -34,17 +33,17 @@ router.get('/', AuthMiddleware.requireAuth, async (req: Request, res: Response) 
         allowChat: meeting.allowChat,
         allowScreenShare: meeting.allowScreenShare,
         allowRecording: meeting.allowRecording,
-        requirePassword: !!meeting.password,
+        requirePassword: !!meeting.passwordHash,
         enableWaitingRoom: meeting.enableWaitingRoom,
       },
       createdAt: meeting.createdAt,
       updatedAt: meeting.updatedAt,
     }));
 
-    res.json({ meetings: meetingList });
+    return res.json({ meetings: meetingList });
   } catch (error: any) {
     console.error('Error fetching meetings:', error);
-    res.status(500).json({ error: 'Failed to fetch meetings' });
+    return res.status(500).json({ error: 'Failed to fetch meetings' });
   }
 });
 
@@ -57,7 +56,7 @@ router.get('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Respo
       where: { code },
       include: {
         _count: {
-          select: { participants: true }
+          select: { participations: true }
         }
       }
     });
@@ -66,14 +65,13 @@ router.get('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Respo
       return res.status(404).json({ error: 'Meeting not found' });
     }
 
-    res.json({
+    return res.json({
       id: meeting.id,
       name: meeting.name,
       code: meeting.code,
       hostId: meeting.hostId,
-      hostName: meeting.hostName,
       status: meeting.status,
-      participants: meeting._count.participants,
+      participants: meeting._count.participations,
       scheduledAt: meeting.scheduledAt,
       duration: meeting.duration,
       maxParticipants: meeting.maxParticipants,
@@ -81,7 +79,7 @@ router.get('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Respo
         allowChat: meeting.allowChat,
         allowScreenShare: meeting.allowScreenShare,
         allowRecording: meeting.allowRecording,
-        requirePassword: !!meeting.password,
+        requirePassword: !!meeting.passwordHash,
         enableWaitingRoom: meeting.enableWaitingRoom,
       },
       createdAt: meeting.createdAt,
@@ -89,7 +87,7 @@ router.get('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Respo
     });
   } catch (error: any) {
     console.error('Error fetching meeting:', error);
-    res.status(500).json({ error: 'Failed to fetch meeting' });
+    return res.status(500).json({ error: 'Failed to fetch meeting' });
   }
 });
 
@@ -115,12 +113,11 @@ router.post('/', AuthMiddleware.requireAuth, async (req: Request, res: Response)
       data: {
         code,
         name,
-        hostId: req.user!.id,
-        hostName: req.user!.name,
+        hostId: req.user!.userId,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
         duration,
         maxParticipants: maxParticipants || 100,
-        password,
+        passwordHash: password,
         allowChat: allowChat ?? true,
         allowScreenShare: allowScreenShare ?? true,
         allowRecording: allowRecording ?? true,
@@ -129,7 +126,7 @@ router.post('/', AuthMiddleware.requireAuth, async (req: Request, res: Response)
       },
       include: {
         _count: {
-          select: { participants: true }
+          select: { participations: true }
         }
       }
     });
@@ -139,9 +136,8 @@ router.post('/', AuthMiddleware.requireAuth, async (req: Request, res: Response)
       name: meeting.name,
       code: meeting.code,
       hostId: meeting.hostId,
-      hostName: meeting.hostName,
       status: meeting.status,
-      participants: meeting._count.participants,
+      participants: meeting._count.participations,
       scheduledAt: meeting.scheduledAt,
       duration: meeting.duration,
       maxParticipants: meeting.maxParticipants,
@@ -149,12 +145,13 @@ router.post('/', AuthMiddleware.requireAuth, async (req: Request, res: Response)
         allowChat: meeting.allowChat,
         allowScreenShare: meeting.allowScreenShare,
         allowRecording: meeting.allowRecording,
-        requirePassword: !!meeting.password,
+        requirePassword: !!meeting.passwordHash,
         enableWaitingRoom: meeting.enableWaitingRoom,
       },
       createdAt: meeting.createdAt,
       updatedAt: meeting.updatedAt,
     });
+    return;
   } catch (error: any) {
     console.error('Error creating meeting:', error);
     res.status(500).json({ error: 'Failed to create meeting' });
@@ -175,7 +172,7 @@ router.patch('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Res
       data: updateData,
       include: {
         _count: {
-          select: { participants: true }
+          select: { participations: true }
         }
       }
     });
@@ -185,9 +182,8 @@ router.patch('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Res
       name: meeting.name,
       code: meeting.code,
       hostId: meeting.hostId,
-      hostName: meeting.hostName,
       status: meeting.status,
-      participants: meeting._count.participants,
+      participants: meeting._count.participations,
       scheduledAt: meeting.scheduledAt,
       duration: meeting.duration,
       maxParticipants: meeting.maxParticipants,
@@ -195,12 +191,13 @@ router.patch('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Res
         allowChat: meeting.allowChat,
         allowScreenShare: meeting.allowScreenShare,
         allowRecording: meeting.allowRecording,
-        requirePassword: !!meeting.password,
+        requirePassword: !!meeting.passwordHash,
         enableWaitingRoom: meeting.enableWaitingRoom,
       },
       createdAt: meeting.createdAt,
       updatedAt: meeting.updatedAt,
     });
+    return;
   } catch (error: any) {
     console.error('Error updating meeting:', error);
     res.status(500).json({ error: 'Failed to update meeting' });
@@ -217,6 +214,7 @@ router.delete('/:code', AuthMiddleware.requireAuth, async (req: Request, res: Re
     });
 
     res.status(204).send();
+    return;
   } catch (error: any) {
     console.error('Error deleting meeting:', error);
     res.status(500).json({ error: 'Failed to delete meeting' });
@@ -236,13 +234,13 @@ router.get('/statistics', AuthMiddleware.requireAuth, async (req: Request, res: 
       prisma.meeting.count({ where: { hostId: hostId as string } }),
       prisma.meeting.count({ where: { hostId: hostId as string, status: 'ACTIVE' } }),
       prisma.meeting.count({ where: { hostId: hostId as string, status: 'SCHEDULED' } }),
-      prisma.participant.aggregate({
+      prisma.participation.aggregate({
         where: { meeting: { hostId: hostId as string } },
         _count: true
       }),
     ]);
 
-    res.json({
+    return res.json({
       totalMeetings,
       activeMeetings,
       scheduledMeetings,
@@ -252,7 +250,7 @@ router.get('/statistics', AuthMiddleware.requireAuth, async (req: Request, res: 
     });
   } catch (error: any) {
     console.error('Error fetching statistics:', error);
-    res.status(500).json({ error: 'Failed to fetch statistics' });
+    return res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });
 

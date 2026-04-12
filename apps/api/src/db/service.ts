@@ -55,7 +55,7 @@ export class DatabaseService {
     return prisma.user.create({
       data: {
         ...data,
-        role: data.role || 'USER',
+        role: (data.role || 'PARTICIPANT') as Role,
       },
     });
   }

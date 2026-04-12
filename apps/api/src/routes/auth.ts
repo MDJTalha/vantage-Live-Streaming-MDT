@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import prisma from '../db/prisma';
 import { config } from '@vantage/config';
+import { AuthService } from '../services/AuthService';
 
 const router = Router();
 
@@ -23,6 +24,49 @@ const generateTokens = (userId: string, email: string) => {
   return { accessToken, refreshToken };
 };
 
+// Create a session record in the database
+async function createSession(userId: string, refreshToken: string, req: Request) {
+  const tokenHash = AuthService.hashToken(refreshToken);
+  const refreshTokenHash = AuthService.hashToken(refreshToken + '-refresh');
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
+
+  return prisma.session.create({
+    data: {
+      userId,
+      tokenHash,
+      refreshToken,
+      refreshTokenHash,
+      userAgent: req.headers['user-agent'] || null,
+      ipAddress: req.ip || req.socket.remoteAddress || null,
+      expiresAt,
+    },
+  });
+}
+
+// Delete session by refresh token
+async function deleteSession(refreshToken: string) {
+  const tokenHash = AuthService.hashToken(refreshToken);
+  await prisma.session.deleteMany({
+    where: { tokenHash },
+  });
+}
+
+// Find session by refresh token
+async function findSession(refreshToken: string) {
+  const tokenHash = AuthService.hashToken(refreshToken);
+  return prisma.session.findUnique({
+    where: { tokenHash },
+    include: { user: true },
+  });
+}
+
+// Strip password hash from user object
+function sanitizeUser(user: any) {
+  const { passwordHash, ...sanitized } = user;
+  return sanitized;
+}
+
 // ==================== REGISTER ====================
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -30,38 +74,38 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Validation
     if (!email || !password || !name) {
-      return res.status(400).json({ 
-        error: 'Email, password, and name are required' 
+      return res.status(400).json({
+        error: 'Email, password, and name are required'
       });
     }
 
     if (password.length < 8) {
-      return res.status(400).json({ 
-        error: 'Password must be at least 8 characters' 
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters'
       });
     }
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
-      where: { email }
+      where: { email: email.toLowerCase() }
     });
 
     if (existingUser) {
-      return res.status(409).json({ 
-        error: 'User with this email already exists' 
+      return res.status(409).json({
+        error: 'User with this email already exists'
       });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user — use PARTICIPANT (valid enum), not 'USER'
     const user = await prisma.user.create({
       data: {
         email: email.toLowerCase(),
         passwordHash: hashedPassword,
         name,
-        role: 'USER',
+        role: 'PARTICIPANT',
         emailVerified: false,
       }
     });
@@ -69,23 +113,17 @@ router.post('/register', async (req: Request, res: Response) => {
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user.id, user.email);
 
-    // Save refresh token
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { refreshToken }
-    });
+    // Create session record
+    await createSession(user.id, refreshToken, req);
 
     // Return user data (without passwordHash)
-    const { passwordHash: _, ...userWithoutPassword } = user;
-
-    res.status(201).json({
-      user: userWithoutPassword,
+    return res.status(201).json({
+      user: sanitizeUser(user),
       accessToken,
       refreshToken,
     });
-  } catch (error: any) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to register user' });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -96,8 +134,8 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Validation
     if (!email || !password) {
-      return res.status(400).json({ 
-        error: 'Email and password are required' 
+      return res.status(400).json({
+        error: 'Email and password are required'
       });
     }
 
@@ -107,8 +145,8 @@ router.post('/login', async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(401).json({ 
-        error: 'Invalid email or password' 
+      return res.status(401).json({
+        error: 'Invalid email or password'
       });
     }
 
@@ -124,26 +162,23 @@ router.post('/login', async (req: Request, res: Response) => {
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user.id, user.email);
 
-    // Update user
+    // Create new session (don't overwrite user — sessions are separate)
+    await createSession(user.id, refreshToken, req);
+
+    // Update last login
     await prisma.user.update({
       where: { id: user.id },
-      data: {
-        refreshToken,
-        lastLoginAt: new Date(),
-      }
+      data: { lastLoginAt: new Date() },
     });
 
     // Return user data (without passwordHash)
-    const { passwordHash: _, ...userWithoutPassword } = user;
-
-    res.json({
-      user: userWithoutPassword,
+    return res.json({
+      user: sanitizeUser(user),
       accessToken,
       refreshToken,
     });
-  } catch (error: any) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Failed to login' });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -156,47 +191,48 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Refresh token required' });
     }
 
-    // Verify refresh token
-    const decoded: any = jwt.verify(refreshToken, config.auth.jwtSecret);
+    // Find session in database
+    const session = await findSession(refreshToken);
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId }
-    });
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
 
-    if (!user || user.refreshToken !== refreshToken) {
+    // Check session expiry
+    if (session.expiresAt < new Date()) {
+      await prisma.session.delete({ where: { id: session.id } });
+      return res.status(401).json({ error: 'Session has expired' });
+    }
+
+    // Verify JWT on stored refresh token
+    try {
+      jwt.verify(refreshToken, config.auth.jwtSecret);
+    } catch {
+      await prisma.session.delete({ where: { id: session.id } });
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
 
     // Generate new access token
-    const { accessToken } = generateTokens(user.id, user.email);
+    const { accessToken } = generateTokens(session.user.id, session.user.email);
 
-    res.json({ accessToken });
-  } catch (error: any) {
-    console.error('Token refresh error:', error);
-    res.status(401).json({ error: 'Invalid refresh token' });
+    return res.json({ accessToken });
+  } catch (error) {
+    throw error;
   }
 });
 
 // ==================== LOGOUT ====================
 router.post('/logout', async (req: Request, res: Response) => {
   try {
-    const { userId } = (req as any).user;
+    const { refreshToken } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
+    if (refreshToken) {
+      await deleteSession(refreshToken);
     }
 
-    // Clear refresh token
-    await prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: null }
-    });
-
-    res.json({ success: true });
-  } catch (error: any) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Failed to logout' });
+    return res.json({ success: true });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -204,6 +240,10 @@ router.post('/logout', async (req: Request, res: Response) => {
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -224,10 +264,9 @@ router.get('/me', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(user);
-  } catch (error: any) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Failed to get user' });
+    return res.json(user);
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -235,6 +274,11 @@ router.get('/me', async (req: Request, res: Response) => {
 router.patch('/me', async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
     const { name, avatarUrl } = req.body;
 
     const user = await prisma.user.update({
@@ -252,10 +296,9 @@ router.patch('/me', async (req: Request, res: Response) => {
       }
     });
 
-    res.json(user);
-  } catch (error: any) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
+    return res.json(user);
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -263,6 +306,11 @@ router.patch('/me', async (req: Request, res: Response) => {
 router.post('/change-password', async (req: Request, res: Response) => {
   try {
     const { userId } = (req as any).user;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
@@ -298,10 +346,96 @@ router.post('/change-password', async (req: Request, res: Response) => {
       data: { passwordHash: hashedPassword }
     });
 
-    res.json({ success: true });
-  } catch (error: any) {
-    console.error('Change password error:', error);
-    res.status(500).json({ error: 'Failed to change password' });
+    return res.json({ success: true });
+  } catch (error) {
+    throw error;
+  }
+});
+
+// ==================== FORGOT PASSWORD ====================
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user) {
+      // Don't reveal if user exists — always return success
+      return res.json({ success: true, message: 'If the email exists, a reset link has been sent' });
+    }
+
+    // Generate reset token (JWT with short expiry)
+    const resetToken = jwt.sign({ userId: user.id, type: 'password-reset' }, config.auth.jwtSecret, { expiresIn: '1h' });
+
+    // TODO: Send email with reset token
+    // await sendPasswordResetEmail(user.email, resetToken);
+
+    return res.json({ success: true, message: 'If the email exists, a reset link has been sent', resetToken });
+  } catch (error) {
+    throw error;
+  }
+});
+
+// ==================== RESET PASSWORD ====================
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    // Verify reset token
+    const decoded: any = jwt.verify(token, config.auth.jwtSecret);
+    if (decoded.type !== 'password-reset') {
+      return res.status(401).json({ error: 'Invalid reset token' });
+    }
+
+    // Hash and update password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: decoded.userId },
+      data: { passwordHash: hashedPassword },
+    });
+
+    // Invalidate all sessions (force re-login)
+    await prisma.session.deleteMany({ where: { userId: decoded.userId } });
+
+    return res.json({ success: true, message: 'Password updated successfully. Please log in again.' });
+  } catch (error) {
+    if ((error as any).name === 'JsonWebTokenError' || (error as any).name === 'TokenExpiredError') {
+      throw error;
+    }
+    throw error;
+  }
+});
+
+// ==================== VERIFY RESET TOKEN ====================
+router.post('/verify-reset-token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
+
+    const decoded: any = jwt.verify(token, config.auth.jwtSecret);
+    if (decoded.type !== 'password-reset') {
+      return res.status(401).json({ valid: false, error: 'Invalid token type' });
+    }
+
+    // Verify user still exists
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) {
+      return res.status(401).json({ valid: false, error: 'User not found' });
+    }
+
+    return res.json({ valid: true, email: user.email });
+  } catch (error) {
+    throw error;
   }
 });
 

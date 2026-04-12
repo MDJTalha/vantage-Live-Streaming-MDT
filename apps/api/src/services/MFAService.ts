@@ -157,7 +157,7 @@ export class MFAService {
         data: {
           mfaEnabled: false,
           mfaSecret: null,
-          mfaBackupCodes: null,
+          mfaBackupCodes: { set: [] },
         },
       });
 
@@ -177,7 +177,7 @@ export class MFAService {
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { mfaSecret: true, mfaEnabled: true },
+        select: { mfaSecret: true, mfaEnabled: true, mfaBackupCodes: true },
       });
 
       if (!user) {

@@ -1,49 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PollStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-export interface Poll {
-  id: string;
-  roomId: string;
-  question: string;
-  options: any;
-  multipleChoice: boolean;
-  createdBy: string;
-  status: string;
-  createdAt: Date;
-  endsAt?: Date;
-  creator: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  votes: PollVote[];
-}
-
-export interface PollVote {
-  id: string;
-  pollId: string;
-  optionId: string;
-  userId?: string;
-  guestId?: string;
-  createdAt: Date;
-}
-
-export interface Question {
-  id: string;
-  roomId: string;
-  userId?: string;
-  guestName?: string;
-  content: string;
-  upvotes: number;
-  answered: boolean;
-  createdAt: Date;
-  user?: {
-    id: string;
-    name: string;
-    avatarUrl?: string;
-  };
-}
 
 /**
  * Poll & Q&A Repository
@@ -58,28 +15,19 @@ export class EngagementRepository {
    */
   static async createPoll(data: {
     roomId: string;
-    question: string;
+    title: string;
     options: any[];
-    multipleChoice: boolean;
-    createdBy: string;
-  }): Promise<Poll> {
+    allowMultiple?: boolean;
+  }) {
     return prisma.poll.create({
       data: {
         roomId: data.roomId,
-        question: data.question,
-        options: JSON.stringify(data.options),
-        multipleChoice: data.multipleChoice,
-        createdBy: data.createdBy,
-        status: 'DRAFT',
+        title: data.title,
+        options: data.options,
+        allowMultiple: data.allowMultiple ?? false,
+        status: 'ACTIVE',
       },
       include: {
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
         votes: true,
       },
     });
@@ -88,7 +36,7 @@ export class EngagementRepository {
   /**
    * Get poll by ID
    */
-  static async getPollById(id: string): Promise<Poll | null> {
+  static async getPollById(id: string) {
     return prisma.poll.findUnique({
       where: { id },
       include: {
@@ -96,14 +44,7 @@ export class EngagementRepository {
           select: {
             id: true,
             name: true,
-            roomCode: true,
-          },
-        },
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+            code: true,
           },
         },
         votes: true,
@@ -114,17 +55,11 @@ export class EngagementRepository {
   /**
    * Get polls by room
    */
-  static async getPollsByRoom(roomId: string): Promise<Poll[]> {
+  static async getPollsByRoom(roomId: string) {
     return prisma.poll.findMany({
       where: { roomId },
       orderBy: { createdAt: 'desc' },
       include: {
-        creator: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
         votes: true,
       },
     });
@@ -134,12 +69,12 @@ export class EngagementRepository {
    * Update poll
    */
   static async updatePoll(id: string, data: {
-    question?: string;
+    title?: string;
     options?: any[];
-    multipleChoice?: boolean;
-    status?: string;
+    allowMultiple?: boolean;
+    status?: PollStatus;
     endsAt?: Date;
-  }): Promise<Poll> {
+  }) {
     return prisma.poll.update({
       where: { id },
       data,
@@ -149,7 +84,7 @@ export class EngagementRepository {
   /**
    * Activate poll
    */
-  static async activatePoll(id: string, durationMinutes: number = 30): Promise<Poll> {
+  static async activatePoll(id: string, durationMinutes: number = 30) {
     return prisma.poll.update({
       where: { id },
       data: {
@@ -162,7 +97,7 @@ export class EngagementRepository {
   /**
    * End poll
    */
-  static async endPoll(id: string): Promise<Poll> {
+  static async endPoll(id: string) {
     return prisma.poll.update({
       where: { id },
       data: {
@@ -174,7 +109,7 @@ export class EngagementRepository {
   /**
    * Delete poll
    */
-  static async deletePoll(id: string): Promise<Poll> {
+  static async deletePoll(id: string) {
     return prisma.poll.delete({
       where: { id },
     });
@@ -184,18 +119,14 @@ export class EngagementRepository {
    * Vote on poll
    */
   static async voteOnPoll(pollId: string, data: {
-    optionId: string;
+    optionIndex: number;
     userId?: string;
-    guestId?: string;
-  }): Promise<PollVote> {
+  }) {
     // Check if already voted
     const existingVote = await prisma.pollVote.findFirst({
       where: {
         pollId,
-        OR: [
-          { userId: data.userId },
-          { guestId: data.guestId },
-        ],
+        userId: data.userId,
       },
     });
 
@@ -206,9 +137,8 @@ export class EngagementRepository {
     return prisma.pollVote.create({
       data: {
         pollId,
-        optionId: data.optionId,
+        optionIndex: data.optionIndex,
         userId: data.userId,
-        guestId: data.guestId,
       },
     });
   }
@@ -216,44 +146,46 @@ export class EngagementRepository {
   /**
    * Get poll results
    */
-  static async getPollResults(pollId: string): Promise<{
-    poll: Poll;
-    results: Array<{
-      id: string;
-      text: string;
-      votes: number;
-      percentage: string;
-    }>;
-  }> {
-    const poll = await this.getPollById(pollId);
-    
+  static async getPollResults(pollId: string) {
+    const poll = await prisma.poll.findUnique({
+      where: { id: pollId },
+      include: {
+        votes: true,
+      },
+    });
+
     if (!poll) {
       throw new Error('Poll not found');
     }
 
-    const options = JSON.parse(poll.options);
-    const voteCounts: Record<string, number> = {};
+    const options = poll.options as any[];
+    const voteCounts: Record<number, number> = {};
 
-    options.forEach((opt: any) => {
-      voteCounts[opt.id] = 0;
+    options.forEach((_opt: any, idx: number) => {
+      voteCounts[idx] = 0;
     });
 
     poll.votes.forEach((vote) => {
-      if (voteCounts[vote.optionId] !== undefined) {
-        voteCounts[vote.optionId]++;
+      if (voteCounts[vote.optionIndex] !== undefined) {
+        voteCounts[vote.optionIndex]++;
       }
     });
 
     const totalVotes = poll.votes.length;
 
     return {
-      poll,
-      results: options.map((opt: any) => ({
-        id: opt.id,
-        text: opt.text,
-        votes: voteCounts[opt.id],
-        percentage: totalVotes > 0 
-          ? ((voteCounts[opt.id] / totalVotes) * 100).toFixed(1) 
+      poll: {
+        id: poll.id,
+        title: poll.title,
+        allowMultiple: poll.allowMultiple,
+        status: poll.status,
+        totalVotes,
+      },
+      results: options.map((opt: any, idx: number) => ({
+        text: opt,
+        votes: voteCounts[idx],
+        percentage: totalVotes > 0
+          ? ((voteCounts[idx] / totalVotes) * 100).toFixed(1)
           : '0',
       })),
     };
@@ -262,14 +194,11 @@ export class EngagementRepository {
   /**
    * Check if user has voted
    */
-  static async hasVoted(pollId: string, userId?: string, guestId?: string): Promise<boolean> {
+  static async hasVoted(pollId: string, userId?: string): Promise<boolean> {
     const vote = await prisma.pollVote.findFirst({
       where: {
         pollId,
-        OR: [
-          { userId },
-          { guestId },
-        ],
+        userId,
       },
     });
     return !!vote;
@@ -285,9 +214,8 @@ export class EngagementRepository {
   static async createQuestion(data: {
     roomId: string;
     userId?: string;
-    guestName?: string;
     content: string;
-  }): Promise<Question> {
+  }) {
     return prisma.question.create({
       data,
       include: {
@@ -305,7 +233,7 @@ export class EngagementRepository {
   /**
    * Get questions by room
    */
-  static async getQuestionsByRoom(roomId: string): Promise<Question[]> {
+  static async getQuestionsByRoom(roomId: string) {
     return prisma.question.findMany({
       where: { roomId },
       orderBy: [
@@ -327,7 +255,7 @@ export class EngagementRepository {
   /**
    * Upvote question
    */
-  static async upvoteQuestion(questionId: string): Promise<Question> {
+  static async upvoteQuestion(questionId: string) {
     return prisma.question.update({
       where: { id: questionId },
       data: {
@@ -339,11 +267,11 @@ export class EngagementRepository {
   /**
    * Mark question as answered
    */
-  static async markQuestionAnswered(questionId: string): Promise<Question> {
+  static async markQuestionAnswered(questionId: string) {
     return prisma.question.update({
       where: { id: questionId },
       data: {
-        answered: true,
+        isAnswered: true,
       },
     });
   }
@@ -351,7 +279,7 @@ export class EngagementRepository {
   /**
    * Delete question
    */
-  static async deleteQuestion(questionId: string): Promise<Question> {
+  static async deleteQuestion(questionId: string) {
     return prisma.question.delete({
       where: { id: questionId },
     });

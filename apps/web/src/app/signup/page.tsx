@@ -178,6 +178,7 @@ export default function SignupPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
+              data-testid="signup-name"
               type="text"
               label="Full Name"
               placeholder="John Doe"
@@ -189,6 +190,7 @@ export default function SignupPage() {
             />
 
             <Input
+              data-testid="signup-email"
               type="email"
               label="Email Address"
               placeholder="you@company.com"
@@ -201,6 +203,7 @@ export default function SignupPage() {
 
             <div className="space-y-2">
               <Input
+                data-testid="signup-password"
                 type={showPassword ? 'text' : 'password'}
                 label="Password"
                 placeholder="At least 8 characters"
@@ -242,6 +245,7 @@ export default function SignupPage() {
             </div>
 
             <Button
+              data-testid="signup-submit"
               type="submit"
               variant="primary"
               size="lg"

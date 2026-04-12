@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ChatProvider } from '@/contexts/ChatContext';
+import { NavigationHeader } from '@/components/NavigationHeader';
+import { HideNavigationOnRoutes } from '@/components/HideNavigationOnRoutes';
 // import { SpeedInsights } from '@vercel/speed-insights/next'; // Temporarily disabled
 
 const inter = Inter({ 
@@ -219,6 +221,9 @@ export default function RootLayout({
       <body className={`${inter.className} bg-[#020617] text-white antialiased`}>
         <AuthProvider>
           <ChatProvider>
+            <HideNavigationOnRoutes>
+              <NavigationHeader />
+            </HideNavigationOnRoutes>
             {children}
           </ChatProvider>
         </AuthProvider>

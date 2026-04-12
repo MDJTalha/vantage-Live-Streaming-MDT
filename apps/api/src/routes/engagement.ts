@@ -9,7 +9,7 @@ const router = Router();
 // Validation schemas
 const createPollSchema = z.object({
   roomId: z.string(),
-  question: z.string().min(1).max(500),
+  title: z.string().min(1).max(500),
   options: z.array(z.object({
     id: z.string(),
     text: z.string().min(1).max(200),
@@ -18,10 +18,11 @@ const createPollSchema = z.object({
 });
 
 const voteSchema = z.object({
-  optionId: z.string(),
+  optionIndex: z.number(),
 });
 
 const createQuestionSchema = z.object({
+  roomId: z.string(),
   content: z.string().min(1).max(1000),
 });
 
@@ -89,14 +90,13 @@ router.get('/:id/results', AuthMiddleware.optional, async (req: Request, res: Re
  */
 router.post('/', AuthMiddleware.protect, async (req: AuthRequest, res: Response) => {
   try {
-    const { roomId, question, options, multipleChoice } = createPollSchema.parse(req.body);
+    const { roomId, title, options, multipleChoice } = createPollSchema.parse(req.body);
 
     const poll = await EngagementRepository.createPoll({
       roomId,
-      question,
+      title,
       options,
-      multipleChoice,
-      createdBy: req.user?.userId || '',
+      allowMultiple: multipleChoice,
     });
 
     res.status(201).json({
@@ -187,10 +187,10 @@ router.post('/:id/end', AuthMiddleware.protect, async (req: AuthRequest, res: Re
 router.post('/:id/vote', AuthMiddleware.protect, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { optionId } = voteSchema.parse(req.body);
+    const { optionIndex } = voteSchema.parse(req.body);
 
     const vote = await EngagementRepository.voteOnPoll(id, {
-      optionId,
+      optionIndex,
       userId: req.user?.userId,
     });
 
@@ -279,7 +279,6 @@ router.post('/', AuthMiddleware.optional, async (req: AuthRequest, res: Response
     const question = await EngagementRepository.createQuestion({
       roomId,
       userId: req.user?.userId,
-      guestName: req.user?.email?.split('@')[0],
       content,
     });
 

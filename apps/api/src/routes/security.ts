@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { z } from 'zod';
 import E2EEncryptionService from '../services/E2EEncryptionService';
 import GDPRRepository from '../repositories/GDPRRepository';
@@ -165,8 +165,8 @@ router.post('/export', AuthMiddleware.protect, async (req: AuthRequest, res: Res
       return;
     }
 
-    const { email } = exportDataSchema.parse(req.body);
-    const requestId = await GDPRRepository.createExportRequest(req.user.userId, email);
+    exportDataSchema.parse(req.body);
+    const requestId = await GDPRRepository.createExportRequest(req.user.userId);
 
     // Process export asynchronously
     GDPRRepository.processExport(requestId).catch(console.error);
@@ -215,7 +215,7 @@ router.get('/export/:requestId', AuthMiddleware.protect, async (req: AuthRequest
       return;
     }
 
-    if (request.status !== 'completed') {
+    if (request.status !== 'READY') {
       res.json({
         success: true,
         data: {
@@ -229,7 +229,10 @@ router.get('/export/:requestId', AuthMiddleware.protect, async (req: AuthRequest
 
     res.json({
       success: true,
-      data: request.exportData,
+      data: {
+        exportUrl: request.exportUrl,
+        expiresAt: request.expiresAt,
+      },
     });
   } catch (error: any) {
     console.error('Error getting export data:', error);

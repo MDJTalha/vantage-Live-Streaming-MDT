@@ -23,7 +23,9 @@
       "Bash(select-string *)",
       "Bash(echo.)",
       "Bash(set *)",
-      "Bash($env:port=\"4000\")"
+      "Bash($env:port=\"4000\")",
+      "Bash(\"c:\\program files\\postgresql\\15\\bin\\psql.exe\" *)",
+      "Bash(psql.exe *)"
     ]
   },
   "$version": 3

@@ -1,14 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/AuthService';
-import DatabaseService from '../db/service';
+import prisma from '../db/prisma';
 
 export interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
     role: string;
-    id?: string;
-    name?: string;
   };
 }
 
@@ -41,7 +39,7 @@ export class AuthMiddleware {
         return;
       }
 
-      // Verify token
+      // Verify JWT
       const payload = AuthService.verifyToken(token);
 
       if (!payload) {
@@ -55,20 +53,34 @@ export class AuthMiddleware {
         return;
       }
 
-      // Check if session exists in database
-      const session = await DatabaseService.getSessionByToken(
-        AuthService.hashToken(token)
-      );
+      // Verify session exists in database
+      const session = await prisma.session.findFirst({
+        where: {
+          refreshToken: token, // Check if this refresh token is still valid
+          expiresAt: { gt: new Date() },
+        },
+      });
 
+      // Also check by tokenHash for access token verification
       if (!session) {
-        res.status(401).json({
-          success: false,
-          error: {
-            code: 'SESSION_EXPIRED',
-            message: 'Session has expired',
+        const tokenHash = AuthService.hashToken(token);
+        const sessionByHash = await prisma.session.findFirst({
+          where: {
+            tokenHash,
+            expiresAt: { gt: new Date() },
           },
         });
-        return;
+
+        if (!sessionByHash) {
+          res.status(401).json({
+            success: false,
+            error: {
+              code: 'SESSION_EXPIRED',
+              message: 'Session has expired',
+            },
+          });
+          return;
+        }
       }
 
       // Attach user to request

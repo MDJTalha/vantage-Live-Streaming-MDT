@@ -104,16 +104,6 @@ export class MessageRepository {
   }
 
   /**
-   * Update message reactions
-   */
-  static async updateReactions(messageId: string, reactions: any[]) {
-    return prisma.chatMessage.update({
-      where: { id: messageId },
-      data: { reactions },
-    });
-  }
-
-  /**
    * Delete message
    */
   static async delete(id: string) {

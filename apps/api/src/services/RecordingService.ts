@@ -1,7 +1,6 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createReadStream } from 'fs';
-import { pipeline } from 'stream/promises';
 import crypto from 'crypto';
 
 export interface RecordingMetadata {
@@ -173,7 +172,7 @@ export class RecordingService {
   /**
    * Generate thumbnail from video
    */
-  async generateThumbnail(videoKey: string, timePosition: number = 5): Promise<string> {
+  async generateThumbnail(videoKey: string, _timePosition: number = 5): Promise<string> {
     // In production, use ffmpeg to extract thumbnail
     // For now, return placeholder
     const thumbnailKey = videoKey.replace('recordings/', 'thumbnails/') + '.jpg';

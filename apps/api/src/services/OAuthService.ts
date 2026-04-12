@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import { config } from '@vantage/config';
 
 export interface OAuthConfig {
   clientId: string;
@@ -245,7 +244,7 @@ export class OAuthService {
       id: data.id,
       email: data.mail || data.userPrincipalName,
       name: data.displayName,
-      avatar: null,
+      avatar: undefined,
       provider: 'microsoft',
     };
   }

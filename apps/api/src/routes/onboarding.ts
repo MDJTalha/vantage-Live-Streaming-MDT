@@ -41,7 +41,6 @@ router.post('/create-organization', requireAuth, async (req: Request, res: Respo
       data: {
         name: organizationName.trim(),
         slug,
-        billingEmail: user.email,
         subscriptionTier: 'FREE',
         users: {
           connect: { id: user.id },
@@ -54,22 +53,18 @@ router.post('/create-organization', requireAuth, async (req: Request, res: Respo
     });
 
     // Send welcome email
+    const welcomeText = `Welcome to VANTAGE, ${user.name}! Your organization "${org.name}" has been created. Visit ${process.env.APP_URL}/dashboard to get started.`;
     await sendEmail({
       to: user.email,
       subject: `Welcome to VANTAGE - ${organizationName}!`,
-      template: 'onboarding-welcome',
-      data: {
-        organizationName: org.name,
-        userName: user.name,
-        dashboardUrl: `${process.env.APP_URL}/dashboard`,
-        upgradeUrl: `${process.env.APP_URL}/account/upgrade`,
-      },
+      html: welcomeText,
+      text: welcomeText,
     });
 
-    res.status(201).json({ data: org });
+    return res.status(201).json({ data: org });
   } catch (error) {
     console.error('Error creating organization:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to create organization' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to create organization' } });
   }
 });
 
@@ -96,10 +91,10 @@ router.get('/my-organization', requireAuth, async (req: Request, res: Response) 
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Organization not found' } });
     }
 
-    res.json({ data: org });
+    return res.json({ data: org });
   } catch (error) {
     console.error('Error fetching organization:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to fetch organization' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to fetch organization' } });
   }
 });
 
@@ -134,10 +129,10 @@ router.patch('/my-organization', requireAuth, async (req: Request, res: Response
       },
     });
 
-    res.json({ data: updated });
+    return res.json({ data: updated });
   } catch (error) {
     console.error('Error updating organization:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to update organization' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to update organization' } });
   }
 });
 
@@ -193,19 +188,15 @@ router.post('/invite-team-member', requireAuth, async (req: Request, res: Respon
     }
 
     // Send invitation email
+    const inviteText = `You have been invited to join ${org.name} on VANTAGE by ${user.name}. Join at: ${process.env.APP_URL}/join?org=${org.slug}. Your role: ${role}.`;
     await sendEmail({
       to: email,
       subject: `Join ${org.name} on VANTAGE`,
-      template: 'team-invitation',
-      data: {
-        organizationName: org.name,
-        inviterName: user.name,
-        joinUrl: `${process.env.APP_URL}/join?org=${org.slug}`,
-        role,
-      },
+      html: inviteText,
+      text: inviteText,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       data: {
         id: member.id,
         email: member.email,
@@ -216,7 +207,7 @@ router.post('/invite-team-member', requireAuth, async (req: Request, res: Respon
     });
   } catch (error) {
     console.error('Error inviting team member:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to invite team member' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to invite team member' } });
   }
 });
 
@@ -253,6 +244,10 @@ router.post('/upgrade-plan', requireAuth, async (req: Request, res: Response) =>
       });
     }
 
+    // TODO: Implement billing service integration
+    return res.status(501).json({ error: { code: 'NOT_IMPLEMENTED', message: 'Billing service not yet implemented' } });
+
+    /*
     // Create/upgrade Stripe subscription
     const subscription = await billingService.createSubscription(org.id, tier);
 
@@ -270,9 +265,10 @@ router.post('/upgrade-plan', requireAuth, async (req: Request, res: Response) =>
     });
 
     res.json({ data: subscription });
+    */
   } catch (error) {
     console.error('Error upgrading plan:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to upgrade plan' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to upgrade plan' } });
   }
 });
 
@@ -299,7 +295,7 @@ router.get('/setup-progress', requireAuth, async (req: Request, res: Response) =
 
     const progress = {
       organizationCreated: !!org.id,
-      profileComplete: !!(org.name && org.website),
+      profileComplete: !!(org.name && org.slug),
       teamInvited: org.users.length > 1,
       billingSetup: !!org.subscription?.stripeCustomerId,
       firstMeetingScheduled: org.rooms.length > 0,
@@ -307,7 +303,7 @@ router.get('/setup-progress', requireAuth, async (req: Request, res: Response) =
 
     const completionPercent = Object.values(progress).filter(Boolean).length * 20;
 
-    res.json({
+    return res.json({
       data: {
         progress,
         completionPercent,
@@ -316,7 +312,7 @@ router.get('/setup-progress', requireAuth, async (req: Request, res: Response) =
     });
   } catch (error) {
     console.error('Error fetching setup progress:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to fetch setup progress' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to fetch setup progress' } });
   }
 });
 
@@ -337,21 +333,18 @@ router.post('/complete-setup', requireAuth, async (req: Request, res: Response) 
     }
 
     // Send "setup complete" email
+    const setupText = `Your VANTAGE setup for "${org.name}" is complete! Visit your dashboard at ${process.env.APP_URL}/dashboard. Need help? Contact support at ${process.env.APP_URL}/support.`;
     await sendEmail({
-      to: org.billingEmail,
+      to: user.email,
       subject: 'Your VANTAGE Setup is Complete!',
-      template: 'setup-complete',
-      data: {
-        organizationName: org.name,
-        dashboardUrl: `${process.env.APP_URL}/dashboard`,
-        supportUrl: `${process.env.APP_URL}/support`,
-      },
+      html: setupText,
+      text: setupText,
     });
 
-    res.json({ success: true, message: 'Setup completed successfully' });
+    return res.json({ success: true, message: 'Setup completed successfully' });
   } catch (error) {
     console.error('Error completing setup:', error);
-    res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to complete setup' } });
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to complete setup' } });
   }
 });
 
@@ -359,36 +352,15 @@ router.post('/complete-setup', requireAuth, async (req: Request, res: Response) 
 // Helper Functions
 // ============================================
 
-function getTierFeatures(tier: string): string[] {
-  const features = {
-    STARTER: [
-      'Up to 50 participants',
-      'Recording & playback',
-      'Polls & Q&A',
-      'Screen sharing',
-      'Email support',
-    ],
-    PROFESSIONAL: [
-      'Up to 500 participants',
-      'All STARTER features',
-      'Live transcription',
-      'Advanced analytics',
-      'Custom branding',
-      'API access',
-      'Priority chat support',
-    ],
-    ENTERPRISE: [
-      'Unlimited participants',
-      'All PROFESSIONAL features',
-      'Custom integrations',
-      'White-label support',
-      '24/7 phone support',
-      'Dedicated account manager',
-    ],
-  };
-
-  return features[tier as keyof typeof features] || [];
-}
+// Reserved for future billing integration
+// function getTierFeatures(tier: string): string[] {
+//   const features = {
+//     STARTER: ['Up to 50 participants', 'Recording & playback', 'Polls & Q&A', 'Screen sharing', 'Email support'],
+//     PROFESSIONAL: ['Up to 500 participants', 'All STARTER features', 'Live transcription', 'Advanced analytics', 'Custom branding', 'API access', 'Priority chat support'],
+//     ENTERPRISE: ['Unlimited participants', 'All PROFESSIONAL features', 'Custom integrations', 'White-label support', '24/7 phone support', 'Dedicated account manager'],
+//   };
+//   return features[tier as keyof typeof features] || [];
+// }
 
 function getNextSteps(progress: any): string[] {
   const steps: string[] = [];

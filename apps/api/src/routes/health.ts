@@ -1,5 +1,6 @@
 import express from 'express';
 import { config } from '@vantage/config';
+import { getIsShuttingDown } from '../utils/shutdown';
 
 export const router = express.Router();
 
@@ -49,8 +50,17 @@ async function checkMediaServer(): Promise<boolean> {
   }
 }
 
-router.get('/health', async (req, res) => {
+router.get('/health', async (_req, res) => {
   try {
+    // Return 503 if server is shutting down
+    if (getIsShuttingDown()) {
+      return res.status(503).json({
+        status: 'shutting_down',
+        message: 'Server is shutting down',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const health: HealthStatus = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -74,16 +84,16 @@ router.get('/health', async (req, res) => {
     }
 
     const httpStatus = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
-    res.status(httpStatus).json(health);
+    return res.status(httpStatus).json(health);
   } catch (error) {
-    res.status(503).json({
+    return res.status(503).json({
       status: 'unhealthy',
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
-router.get('/health/ready', async (req, res) => {
+router.get('/health/ready', async (_req, res) => {
   // Detailed readiness check for load balancers
   const [dbReady, redisReady] = await Promise.all([
     checkDatabase(),
@@ -100,12 +110,12 @@ router.get('/health/ready', async (req, res) => {
   });
 });
 
-router.get('/health/live', (req, res) => {
+router.get('/health/live', (_req, res) => {
   // Liveness check - just verify process is running
   res.json({ live: true, uptime: process.uptime() });
 });
 
-router.get('/health/info', (req, res) => {
+router.get('/health/info', (_req, res) => {
   // Detailed service information
   res.json({
     name: 'Vantage API',

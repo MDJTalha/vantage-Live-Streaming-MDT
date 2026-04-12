@@ -1,6 +1,10 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
 import prisma from './db/prisma';
+import { AuthService } from './services/AuthService';
+import { createAdapter } from '@socket.io/redis-adapter';
+import Redis from 'ioredis';
+import { config } from '@vantage/config';
 
 export let io: Server | null = null;
 
@@ -8,6 +12,11 @@ interface SocketData {
   userId: string;
   email: string;
   name: string;
+  role: string;
+}
+
+interface AuthSocket extends Socket {
+  data: SocketData;
 }
 
 export function initializeSocket(server: http.Server) {
@@ -20,47 +29,126 @@ export function initializeSocket(server: http.Server) {
     transports: ['websocket', 'polling'],
   });
 
-  io.on('connection', (socket: Socket<SocketData>) => {
+  // ============================================
+  // C-07 FIX: Redis Adapter for multi-instance support
+  // ============================================
+  try {
+    const pubClient = new Redis(config.redis.url);
+    const subClient = pubClient.duplicate();
+
+    pubClient.on('error', (err) => console.error('Redis pubClient error:', err));
+    subClient.on('error', (err) => console.error('Redis subClient error:', err));
+
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('✅ Socket.IO Redis adapter initialized (multi-instance support)');
+  } catch (error) {
+    console.warn('⚠️  Socket.IO Redis adapter failed — falling back to in-memory (multi-instance will NOT work):', error);
+  }
+
+  // ============================================
+  // C-04 FIX: Authentication Middleware for ALL WebSocket connections
+  // ============================================
+  io.use(async (socket: AuthSocket, next) => {
+    try {
+      const token =
+        socket.handshake.auth.token ||
+        socket.handshake.headers.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        return next(new Error('Authentication required'));
+      }
+
+      const payload = AuthService.verifyToken(token);
+      if (!payload) {
+        return next(new Error('Invalid token'));
+      }
+
+      // Verify session exists
+      const session = await prisma.session.findFirst({
+        where: {
+          refreshToken: token,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (!session) {
+        const tokenHash = AuthService.hashToken(token);
+        const sessionByHash = await prisma.session.findFirst({
+          where: { tokenHash, expiresAt: { gt: new Date() } },
+        });
+        if (!sessionByHash) {
+          return next(new Error('Session expired'));
+        }
+      }
+
+      // Fetch user for name/email
+      const user = await prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { id: true, email: true, name: true, role: true },
+      });
+
+      if (!user) {
+        return next(new Error('User not found'));
+      }
+
+      socket.data.userId = user.id;
+      socket.data.email = user.email;
+      socket.data.name = user.name;
+      socket.data.role = user.role;
+
+      next();
+    } catch (error) {
+      next(new Error('Authentication failed'));
+    }
+  });
+
+  io.on('connection', (socket: AuthSocket) => {
     console.log(`✅ User connected: ${socket.data.userId} (${socket.data.name})`);
 
-    // ==================== JOIN ROOM ====================
-    socket.on('join', async (data: { userId: string; meetingId?: string }) => {
-      const { userId, meetingId } = data;
-
-      // Store user data in socket
-      socket.data.userId = userId;
+    // ==================== JOIN MEETING ====================
+    socket.on('join', async (data: { meetingId?: string }) => {
+      const { meetingId } = data;
 
       try {
-        // Get user from database
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { id: true, email: true, name: true, avatarUrl: true }
-        });
-
-        if (user) {
-          socket.data.email = user.email;
-          socket.data.name = user.name;
-        }
-
         // Join meeting room if provided
         if (meetingId) {
           socket.join(meetingId);
-          console.log(`User ${userId} joined meeting ${meetingId}`);
+          console.log(`User ${socket.data.userId} joined meeting ${meetingId}`);
+
+          // Create participation record using correct model name
+          await prisma.participation.create({
+            data: {
+              meetingId,
+              userId: socket.data.userId,
+              joinedAt: new Date(),
+              status: 'JOINED',
+            },
+          });
 
           // Notify others in the meeting
           socket.to(meetingId).emit('user:joined', {
-            userId,
-            name: user?.name || 'Unknown',
+            userId: socket.data.userId,
+            name: socket.data.name,
             timestamp: new Date().toISOString(),
+          });
+
+          // Update participant count
+          const participantCount = await prisma.participation.count({
+            where: { meetingId, leftAt: null },
+          });
+
+          io?.to(meetingId).emit('meeting:participants:update', {
+            meetingId,
+            count: participantCount,
           });
         }
 
         // Send list of online users
         const onlineUsers = await getOnlineUsers();
         socket.emit('users', onlineUsers);
-
       } catch (error) {
-        console.error('Error joining room:', error);
+        console.error('Error joining meeting:', error);
+        socket.emit('error', { message: 'Failed to join meeting' });
       }
     });
 
@@ -75,10 +163,10 @@ export function initializeSocket(server: http.Server) {
           return;
         }
 
-        // Save message to database
+        // Save message using correct model fields (Message has senderId, receiverId)
         const message = await prisma.message.create({
           data: {
-            meetingId: 'direct', // Direct messages don't belong to a meeting
+            meetingId: 'direct',
             senderId: from,
             receiverId: to,
             content,
@@ -87,9 +175,9 @@ export function initializeSocket(server: http.Server) {
           },
           include: {
             sender: {
-              select: { id: true, name: true, email: true }
-            }
-          }
+              select: { id: true, name: true, email: true },
+            },
+          },
         });
 
         // Send to recipient
@@ -106,10 +194,8 @@ export function initializeSocket(server: http.Server) {
 
         // Confirm to sender
         socket.emit('message:sent', {
-          id: message.id,
           ...message,
         });
-
       } catch (error: any) {
         console.error('Error sending direct message:', error);
         socket.emit('error', { message: 'Failed to send message' });
@@ -127,7 +213,7 @@ export function initializeSocket(server: http.Server) {
           return;
         }
 
-        // Save message to database
+        // Save message using correct model fields
         const message = await prisma.message.create({
           data: {
             meetingId: meetingId || 'general',
@@ -138,9 +224,9 @@ export function initializeSocket(server: http.Server) {
           },
           include: {
             sender: {
-              select: { id: true, name: true, email: true }
-            }
-          }
+              select: { id: true, name: true, email: true },
+            },
+          },
         });
 
         // Broadcast to meeting room or all users
@@ -155,7 +241,6 @@ export function initializeSocket(server: http.Server) {
             read: false,
           });
         } else {
-          // Broadcast to all connected users
           io?.emit('message', {
             id: message.id,
             senderId: message.senderId,
@@ -166,29 +251,26 @@ export function initializeSocket(server: http.Server) {
             read: false,
           });
         }
-
       } catch (error: any) {
         console.error('Error sending broadcast message:', error);
         socket.emit('error', { message: 'Failed to send message' });
       }
     });
 
-    // ==================== MEETING EVENTS ====================
-    
-    // User joined meeting
+    // ==================== MEETING JOIN ====================
     socket.on('meeting:join', async (data: { meetingId: string }) => {
       const { meetingId } = data;
       socket.join(meetingId);
 
-      // Create participant record
       try {
-        await prisma.participant.create({
+        // Create participation record (correct model name)
+        await prisma.participation.create({
           data: {
             meetingId,
             userId: socket.data.userId,
-            name: socket.data.name || 'Anonymous',
             joinedAt: new Date(),
-          }
+            status: 'JOINED',
+          },
         });
 
         // Notify others
@@ -199,27 +281,28 @@ export function initializeSocket(server: http.Server) {
         });
 
         // Update participant count
-        const participantCount = await prisma.participant.count({
-          where: { meetingId }
+        const participantCount = await prisma.participation.count({
+          where: { meetingId, leftAt: null },
         });
 
         io?.to(meetingId).emit('meeting:participants:update', {
           meetingId,
           count: participantCount,
         });
-
       } catch (error) {
         console.error('Error joining meeting:', error);
+        socket.emit('error', { message: 'Failed to join meeting' });
       }
     });
 
-    // User left meeting
+    // ==================== MEETING LEAVE ====================
     socket.on('meeting:leave', async (data: { meetingId: string }) => {
       const { meetingId } = data;
       socket.leave(meetingId);
 
       try {
-        await prisma.participant.updateMany({
+        // Update participation record (correct model name)
+        await prisma.participation.updateMany({
           where: {
             meetingId,
             userId: socket.data.userId,
@@ -227,7 +310,8 @@ export function initializeSocket(server: http.Server) {
           },
           data: {
             leftAt: new Date(),
-          }
+            status: 'LEFT',
+          },
         });
 
         // Notify others
@@ -237,15 +321,14 @@ export function initializeSocket(server: http.Server) {
         });
 
         // Update participant count
-        const participantCount = await prisma.participant.count({
-          where: { meetingId }
+        const participantCount = await prisma.participation.count({
+          where: { meetingId, leftAt: null },
         });
 
         io?.to(meetingId).emit('meeting:participants:update', {
           meetingId,
           count: participantCount,
         });
-
       } catch (error) {
         console.error('Error leaving meeting:', error);
       }
@@ -256,14 +339,14 @@ export function initializeSocket(server: http.Server) {
       try {
         const { meetingId, type } = data;
 
-        // Save reaction to database
+        // Save reaction (Reaction model exists in consolidated schema)
         const reaction = await prisma.reaction.create({
           data: {
             meetingId,
             userId: socket.data.userId,
             type,
             expiresAt: new Date(Date.now() + 5000), // 5 seconds
-          }
+          },
         });
 
         // Broadcast to meeting
@@ -274,7 +357,6 @@ export function initializeSocket(server: http.Server) {
           type,
           timestamp: reaction.createdAt.toISOString(),
         });
-
       } catch (error) {
         console.error('Error sending reaction:', error);
       }
@@ -283,7 +365,7 @@ export function initializeSocket(server: http.Server) {
     // ==================== SCREEN SHARE ====================
     socket.on('screen:share', (data: { meetingId: string }) => {
       const { meetingId } = data;
-      
+
       socket.to(meetingId).emit('screen:shared', {
         userId: socket.data.userId,
         userName: socket.data.name,
@@ -293,7 +375,7 @@ export function initializeSocket(server: http.Server) {
 
     socket.on('screen:stop', (data: { meetingId: string }) => {
       const { meetingId } = data;
-      
+
       socket.to(meetingId).emit('screen:stopped', {
         userId: socket.data.userId,
         timestamp: new Date().toISOString(),
@@ -305,15 +387,16 @@ export function initializeSocket(server: http.Server) {
       console.log(`❌ User disconnected: ${socket.data.userId}`);
 
       try {
-        // Update all active participations
-        await prisma.participant.updateMany({
+        // Update all active participations using correct model name
+        await prisma.participation.updateMany({
           where: {
             userId: socket.data.userId,
             leftAt: null,
           },
           data: {
             leftAt: new Date(),
-          }
+            status: 'LEFT',
+          },
         });
 
         // Notify all rooms user was in
@@ -330,7 +413,6 @@ export function initializeSocket(server: http.Server) {
         // Update online users list
         const onlineUsers = await getOnlineUsers();
         io?.emit('users', onlineUsers);
-
       } catch (error) {
         console.error('Error on disconnect:', error);
       }
@@ -342,20 +424,22 @@ export function initializeSocket(server: http.Server) {
     });
   });
 
-  console.log('✅ Socket.IO initialized');
+  console.log('✅ Socket.IO initialized with authentication middleware');
   return io;
 }
 
-// ==================== HELPER FUNCTIONS ====================
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 
 async function getOnlineUsers() {
   if (!io) return [];
 
   const sockets = await io?.fetchSockets() || [];
   const users = sockets.map(socket => ({
-    id: socket.data.userId,
-    name: socket.data.name,
-    email: socket.data.email,
+    id: (socket.data as SocketData).userId,
+    name: (socket.data as SocketData).name,
+    email: (socket.data as SocketData).email,
     online: true,
   }));
 

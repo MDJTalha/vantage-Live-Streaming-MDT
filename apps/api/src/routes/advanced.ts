@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { z } from 'zod';
 import RecordingService from '../services/RecordingService';
 import MediaProcessorService from '../services/MediaProcessorService';
@@ -227,7 +227,7 @@ router.post('/stream/stop', AuthMiddleware.protect, async (req: AuthRequest, res
  * GET /api/v1/stream/status
  * Get active streams
  */
-router.get('/stream/status', AuthMiddleware.protect, async (req: AuthRequest, res: Response) => {
+router.get('/stream/status', AuthMiddleware.protect, async (_req: AuthRequest, res: Response) => {
   try {
     const recordings = mediaProcessorService.getActiveRecordings();
     const streams = mediaProcessorService.getActiveStreams();

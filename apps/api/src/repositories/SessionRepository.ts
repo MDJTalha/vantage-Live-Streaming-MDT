@@ -9,13 +9,24 @@ export class SessionRepository {
   static async create(data: {
     userId: string;
     tokenHash: string;
+    refreshToken: string;
     refreshTokenHash: string;
     expiresAt: Date;
     userAgent?: string;
     ipAddress?: string;
+    provider?: string;
   }) {
     return prisma.session.create({
-      data,
+      data: {
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        refreshToken: data.refreshToken,
+        refreshTokenHash: data.refreshTokenHash,
+        expiresAt: data.expiresAt,
+        userAgent: data.userAgent,
+        ipAddress: data.ipAddress,
+        provider: data.provider,
+      },
       include: {
         user: {
           select: {

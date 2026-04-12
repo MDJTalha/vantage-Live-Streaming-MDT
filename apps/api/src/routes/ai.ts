@@ -1,18 +1,55 @@
-import { Router, Request, Response } from 'express';
-import { spawn } from 'child_process';
-import path from 'path';
+import { Router, Response } from 'express';
 import AuthMiddleware from '../middleware/auth';
+import RateLimiter from '../middleware/rateLimiter';
+import type { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+// C-08 FIX: AI Services URL from environment (FastAPI server)
+const AI_SERVICES_URL = process.env.AI_SERVICES_URL || 'http://localhost:5000';
+
+/**
+ * C-08 FIX: Call AI service via HTTP instead of spawning Python subprocess
+ * - Non-blocking (doesn't block Node.js event loop)
+ * - Proper timeout (60s)
+ * - Error isolation (AI crash doesn't crash API)
+ * - No Python dependency on API server
+ */
+async function callAIService(endpoint: string, params: any, timeoutMs = 60000): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${AI_SERVICES_URL}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`AI service error: ${response.status} ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    clearTimeout(timeout);
+    if (error.name === 'AbortError') {
+      throw new Error(`AI service timed out after ${timeoutMs / 1000}s`);
+    }
+    throw error;
+  }
+}
+
 // ==================== RUN DATA CORRECTION ====================
-router.post('/correct-meeting/:meetingId', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.post('/correct-meeting/:meetingId', RateLimiter.strict(), AuthMiddleware.requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { meetingId } = req.params;
     const { userId } = req.user!;
 
-    // Run Python script
-    const result = await runPythonScript('data_correction.py', {
+    const result = await callAIService('data_correction', {
       action: 'correct_meeting',
       meetingId,
       userId,
@@ -24,18 +61,17 @@ router.post('/correct-meeting/:meetingId', AuthMiddleware.requireAuth, async (re
       corrections: result.corrections,
       analysis: result.analysis,
     });
-  } catch (error: any) {
-    console.error('Error correcting meeting data:', error);
-    res.status(500).json({ error: 'Failed to correct meeting data' });
+  } catch (error) {
+    throw error;
   }
 });
 
 // ==================== ENRICH USER PROFILES ====================
-router.post('/enrich-users', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.post('/enrich-users', RateLimiter.strict(), AuthMiddleware.requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { userId } = req.query;
-    
-    const result = await runPythonScript('data_correction.py', {
+
+    const result = await callAIService('data_correction', {
       action: 'enrich_users',
       userId: userId as string,
     });
@@ -45,18 +81,17 @@ router.post('/enrich-users', AuthMiddleware.requireAuth, async (req: Request, re
       usersEnriched: result.users_enriched,
       enrichments: result.enrichments,
     });
-  } catch (error: any) {
-    console.error('Error enriching user profiles:', error);
-    res.status(500).json({ error: 'Failed to enrich user profiles' });
+  } catch (error) {
+    throw error;
   }
 });
 
 // ==================== ENHANCE RECORDINGS ====================
-router.post('/enhance-recordings', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.post('/enhance-recordings', RateLimiter.strict(), AuthMiddleware.requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { recordingId } = req.query;
-    
-    const result = await runPythonScript('data_correction.py', {
+
+    const result = await callAIService('data_correction', {
       action: 'enhance_recordings',
       recordingId: recordingId as string,
     });
@@ -66,18 +101,17 @@ router.post('/enhance-recordings', AuthMiddleware.requireAuth, async (req: Reque
       recordingsEnhanced: result.recordings_enhanced,
       enhancements: result.enhancements,
     });
-  } catch (error: any) {
-    console.error('Error enhancing recordings:', error);
-    res.status(500).json({ error: 'Failed to enhance recordings' });
+  } catch (error) {
+    throw error;
   }
 });
 
 // ==================== BUILD KNOWLEDGE GRAPH ====================
-router.post('/build-knowledge', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.post('/build-knowledge', RateLimiter.strict(), AuthMiddleware.requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { limit = 50 } = req.query;
-    
-    const result = await runPythonScript('data_correction.py', {
+
+    const result = await callAIService('data_correction', {
       action: 'build_knowledge',
       limit: parseInt(limit as string),
     });
@@ -87,16 +121,15 @@ router.post('/build-knowledge', AuthMiddleware.requireAuth, async (req: Request,
       meetingsProcessed: result.meetings_processed,
       knowledgeNodesAdded: result.knowledge_nodes_added,
     });
-  } catch (error: any) {
-    console.error('Error building knowledge graph:', error);
-    res.status(500).json({ error: 'Failed to build knowledge graph' });
+  } catch (error) {
+    throw error;
   }
 });
 
 // ==================== DATA QUALITY AUDIT ====================
-router.get('/audit-quality', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.get('/audit-quality', RateLimiter.strict(), AuthMiddleware.requireAuth, async (_req: AuthRequest, res: Response) => {
   try {
-    const result = await runPythonScript('data_correction.py', {
+    const result = await callAIService('data_correction', {
       action: 'audit_quality',
     });
 
@@ -104,18 +137,17 @@ router.get('/audit-quality', AuthMiddleware.requireAuth, async (req: Request, re
       success: true,
       audit: result,
     });
-  } catch (error: any) {
-    console.error('Error running data quality audit:', error);
-    res.status(500).json({ error: 'Failed to run data quality audit' });
+  } catch (error) {
+    throw error;
   }
 });
 
 // ==================== AI CHAT (GENERAL) ====================
-router.post('/chat', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.post('/chat', RateLimiter.strict(), AuthMiddleware.requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { message, domain = 'general' } = req.body;
-    
-    const result = await runPythonScript('brain.py', {
+
+    const result = await callAIService('brain', {
       action: 'chat',
       message,
       domain,
@@ -126,46 +158,9 @@ router.post('/chat', AuthMiddleware.requireAuth, async (req: Request, res: Respo
       response: result.response,
       analysis: result.analysis,
     });
-  } catch (error: any) {
-    console.error('Error processing AI chat:', error);
-    res.status(500).json({ error: 'Failed to process AI chat' });
+  } catch (error) {
+    throw error;
   }
 });
-
-// ==================== HELPER ====================
-
-function runPythonScript(scriptName: string, params: any): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const scriptPath = path.join(__dirname, '../../ai-services/src', scriptName);
-    
-    const python = spawn('python', [
-      scriptPath,
-      JSON.stringify(params)
-    ]);
-
-    let output = '';
-    let error = '';
-
-    python.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
-    python.stderr.on('data', (data) => {
-      error += data.toString();
-    });
-
-    python.on('close', (code) => {
-      if (code === 0) {
-        try {
-          resolve(JSON.parse(output));
-        } catch {
-          resolve({ output });
-        }
-      } else {
-        reject(new Error(error || `Script exited with code ${code}`));
-      }
-    });
-  });
-}
 
 export default router;

@@ -1,12 +1,31 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@vantage/ui';
 import { BarChart3, ArrowLeft, Video } from 'lucide-react';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 export default function AnalyticsPage() {
   const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  // Auth guard - redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isLoading, router]);
+
+  // Show loading or redirect state
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500/20 border-t-blue-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#020617] via-[#0a0f1f] to-[#020617] text-white">

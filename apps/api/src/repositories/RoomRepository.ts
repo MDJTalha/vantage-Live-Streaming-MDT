@@ -25,9 +25,9 @@ export class RoomRepository {
   /**
    * Find room by room code
    */
-  static async findByCode(roomCode: string) {
+  static async findByCode(code: string) {
     return prisma.room.findUnique({
-      where: { roomCode },
+      where: { code },
       include: {
         host: {
           select: {
@@ -59,17 +59,17 @@ export class RoomRepository {
    * Create room
    */
   static async create(data: {
-    roomCode: string;
+    code: string;
     name: string;
-    description?: string;
     hostId: string;
-    settings?: any;
     passwordHash?: string;
   }) {
     return prisma.room.create({
       data: {
-        ...data,
-        settings: data.settings || {},
+        code: data.code,
+        name: data.name,
+        hostId: data.hostId,
+        password: data.passwordHash,
         status: 'SCHEDULED',
       },
       include: {
@@ -90,7 +90,6 @@ export class RoomRepository {
   static async update(id: string, data: Partial<{
     name: string;
     description: string;
-    settings: any;
     status: RoomStatus;
     startedAt: Date;
     endedAt: Date;
@@ -212,15 +211,15 @@ export class RoomRepository {
    */
   static async addParticipant(roomId: string, data: {
     userId?: string;
-    guestName?: string;
-    guestEmail?: string;
+    name: string;
     role?: RoomRole;
   }) {
     return prisma.roomParticipant.create({
       data: {
         roomId,
-        ...data,
-        role: data.role || 'PARTICIPANT',
+        userId: data.userId,
+        name: data.name,
+        role: (data.role || 'PARTICIPANT') as RoomRole,
       },
       include: {
         user: {
@@ -243,8 +242,8 @@ export class RoomRepository {
       data: {
         leftAt: new Date(),
         isSpeaking: false,
-        isVideoEnabled: false,
-        isAudioEnabled: false,
+        isVideoOff: false,
+        isMuted: false,
       },
     });
   }
@@ -297,8 +296,9 @@ export class RoomRepository {
   static async updateParticipant(participantId: string, data: {
     role?: RoomRole;
     isSpeaking?: boolean;
-    isVideoEnabled?: boolean;
-    isAudioEnabled?: boolean;
+    isVideoOff?: boolean;
+    isMuted?: boolean;
+    isHandRaised?: boolean;
   }) {
     return prisma.roomParticipant.update({
       where: { id: participantId },

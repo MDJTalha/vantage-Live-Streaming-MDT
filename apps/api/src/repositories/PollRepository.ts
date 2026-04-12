@@ -8,24 +8,17 @@ export class PollRepository {
    */
   static async create(data: {
     roomId: string;
-    question: string;
+    title: string;
     options: any;
-    multipleChoice: boolean;
-    createdBy: string;
+    allowMultiple: boolean;
   }) {
     return prisma.poll.create({
       data: {
-        ...data,
-        status: 'DRAFT',
-      },
-      include: {
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        roomId: data.roomId,
+        title: data.title,
+        options: data.options,
+        allowMultiple: data.allowMultiple,
+        status: 'ACTIVE',
       },
     });
   }
@@ -41,14 +34,7 @@ export class PollRepository {
           select: {
             id: true,
             name: true,
-            roomCode: true,
-          },
-        },
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+            code: true,
           },
         },
         votes: true,
@@ -64,12 +50,6 @@ export class PollRepository {
       where: { roomId },
       orderBy: { createdAt: 'desc' },
       include: {
-        creator: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
         votes: true,
       },
     });
@@ -79,9 +59,9 @@ export class PollRepository {
    * Update poll
    */
   static async update(id: string, data: Partial<{
-    question: string;
+    title: string;
     options: any;
-    multipleChoice: boolean;
+    allowMultiple: boolean;
     status: PollStatus;
     endsAt: Date;
   }>) {
@@ -129,18 +109,14 @@ export class PollRepository {
    * Vote on poll
    */
   static async vote(pollId: string, data: {
-    optionId: string;
+    optionIndex: number;
     userId?: string;
-    guestId?: string;
   }) {
     // Check if already voted
     const existingVote = await prisma.pollVote.findFirst({
       where: {
         pollId,
-        OR: [
-          { userId: data.userId },
-          { guestId: data.guestId },
-        ],
+        userId: data.userId,
       },
     });
 
@@ -151,7 +127,8 @@ export class PollRepository {
     return prisma.pollVote.create({
       data: {
         pollId,
-        ...data,
+        optionIndex: data.optionIndex,
+        userId: data.userId,
       },
     });
   }
@@ -164,7 +141,6 @@ export class PollRepository {
       where: { id: pollId },
       include: {
         votes: true,
-        options: true,
       },
     });
 
@@ -173,16 +149,16 @@ export class PollRepository {
     }
 
     // Calculate vote counts per option
-    const options = JSON.parse(JSON.stringify(poll.options));
-    const voteCounts: Record<string, number> = {};
+    const options = poll.options as any[];
+    const voteCounts: Record<number, number> = {};
 
-    options.forEach((opt: any) => {
-      voteCounts[opt.id] = 0;
+    options.forEach((_opt: any, idx: number) => {
+      voteCounts[idx] = 0;
     });
 
     poll.votes.forEach((vote) => {
-      if (voteCounts[vote.optionId] !== undefined) {
-        voteCounts[vote.optionId]++;
+      if (voteCounts[vote.optionIndex] !== undefined) {
+        voteCounts[vote.optionIndex]++;
       }
     });
 
@@ -191,16 +167,15 @@ export class PollRepository {
     return {
       poll: {
         id: poll.id,
-        question: poll.question,
-        multipleChoice: poll.multipleChoice,
+        title: poll.title,
+        allowMultiple: poll.allowMultiple,
         status: poll.status,
         totalVotes,
       },
-      results: options.map((opt: any) => ({
-        id: opt.id,
-        text: opt.text,
-        votes: voteCounts[opt.id],
-        percentage: totalVotes > 0 ? ((voteCounts[opt.id] / totalVotes) * 100).toFixed(1) : '0',
+      results: options.map((opt: any, idx: number) => ({
+        text: opt,
+        votes: voteCounts[idx],
+        percentage: totalVotes > 0 ? ((voteCounts[idx] / totalVotes) * 100).toFixed(1) : '0',
       })),
     };
   }
@@ -221,13 +196,7 @@ export class PollRepository {
           select: {
             id: true,
             name: true,
-            roomCode: true,
-          },
-        },
-        creator: {
-          select: {
-            id: true,
-            name: true,
+            code: true,
           },
         },
         _count: {
@@ -242,14 +211,11 @@ export class PollRepository {
   /**
    * Check if user has voted
    */
-  static async hasVoted(pollId: string, userId?: string, guestId?: string) {
+  static async hasVoted(pollId: string, userId?: string) {
     const vote = await prisma.pollVote.findFirst({
       where: {
         pollId,
-        OR: [
-          { userId },
-          { guestId },
-        ],
+        userId,
       },
     });
     return !!vote;

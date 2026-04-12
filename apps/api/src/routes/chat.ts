@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { z } from 'zod';
 import ChatRepository from '../repositories/ChatRepository';
 import AuthMiddleware from '../middleware/auth';
@@ -12,11 +12,6 @@ const createMessageSchema = z.object({
   content: z.string().min(1).max(1000),
   messageType: z.enum(['TEXT', 'EMOJI', 'SYSTEM', 'FILE', 'IMAGE']).optional(),
   parentId: z.string().optional(),
-});
-
-const addReactionSchema = z.object({
-  messageId: z.string(),
-  emoji: z.string(),
 });
 
 /**
@@ -62,7 +57,7 @@ router.post('/', AuthMiddleware.protect, async (req: AuthRequest, res: Response)
       roomId,
       userId: req.user?.userId,
       content,
-      messageType: messageType || 'TEXT',
+      type: messageType || 'TEXT',
       parentId,
     });
 
@@ -89,37 +84,6 @@ router.post('/', AuthMiddleware.protect, async (req: AuthRequest, res: Response)
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to create message',
-      },
-    });
-  }
-});
-
-/**
- * POST /api/v1/chat/:messageId/reaction
- * Add/remove reaction to message
- */
-router.post('/:messageId/reaction', AuthMiddleware.protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const { messageId } = req.params;
-    const { emoji } = addReactionSchema.parse(req.body);
-
-    const message = await ChatRepository.addReaction(
-      messageId,
-      req.user?.userId || '',
-      emoji
-    );
-
-    res.json({
-      success: true,
-      data: message,
-    });
-  } catch (error: any) {
-    console.error('Error adding reaction:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: error.message || 'Failed to add reaction',
       },
     });
   }

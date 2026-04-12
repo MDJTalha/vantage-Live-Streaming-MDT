@@ -33,9 +33,12 @@ export class E2EEncryptionService {
    * Generate shared secret from key exchange
    */
   deriveSharedSecret(privateKey: string, publicKey: string): Buffer {
+    const privateKeyObj = crypto.createPrivateKey(privateKey);
+    const publicKeyObj = crypto.createPublicKey(publicKey);
+
     const derivedKey = crypto.diffieHellman({
-      privateKey,
-      publicKey,
+      privateKey: privateKeyObj,
+      publicKey: publicKeyObj,
     });
 
     return crypto.createHash('sha256').update(derivedKey).digest();

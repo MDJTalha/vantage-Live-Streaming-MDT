@@ -1,14 +1,16 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../db/prisma';
 import AuthMiddleware from '../middleware/auth';
+import type { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // ==================== GET DASHBOARD ANALYTICS ====================
-router.get('/dashboard', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.get('/dashboard', AuthMiddleware.requireAuth as any, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user!;
   try {
     const { hostId } = req.query;
-    const userId = hostId as string || req.user!.id;
+    const userId = hostId as string || user.userId;
 
     // Get meeting statistics
     const [totalMeetings, activeMeetings, scheduledMeetings, endedMeetings] = await Promise.all([
@@ -19,7 +21,7 @@ router.get('/dashboard', AuthMiddleware.requireAuth, async (req: Request, res: R
     ]);
 
     // Get participant statistics
-    const totalParticipants = await prisma.participant.aggregate({
+    const totalParticipants = await prisma.participation.aggregate({
       where: { meeting: { hostId: userId } },
       _count: true
     });
@@ -41,7 +43,7 @@ router.get('/dashboard', AuthMiddleware.requireAuth, async (req: Request, res: R
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
-          select: { participants: true }
+          select: { participations: true }
         }
       }
     });
@@ -65,7 +67,7 @@ router.get('/dashboard', AuthMiddleware.requireAuth, async (req: Request, res: R
         name: m.name,
         code: m.code,
         status: m.status,
-        participants: m._count.participants,
+        participants: m._count.participations,
         scheduledAt: m.scheduledAt,
         createdAt: m.createdAt,
       })),
@@ -77,19 +79,15 @@ router.get('/dashboard', AuthMiddleware.requireAuth, async (req: Request, res: R
 });
 
 // ==================== GET MEETING ANALYTICS ====================
-router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.get('/meetings/:meetingId', AuthMiddleware.requireAuth as any, async (req: Request, res: Response) => {
   try {
     const { meetingId } = req.params;
 
     const meeting = await prisma.meeting.findUnique({
       where: { id: meetingId },
       include: {
-        participants: {
-          select: {
-            id: true,
-            name: true,
-            joinedAt: true,
-            leftAt: true,
+        participations: {
+          include: {
             user: {
               select: {
                 email: true,
@@ -99,9 +97,7 @@ router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Reque
           }
         },
         messages: {
-          select: {
-            id: true,
-            createdAt: true,
+          include: {
             sender: {
               select: {
                 name: true,
@@ -112,22 +108,10 @@ router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Reque
           take: 50
         },
         reactions: {
-          select: {
-            type: true,
-            createdAt: true,
-          },
           orderBy: { createdAt: 'desc' },
           take: 50
         },
-        recordings: {
-          select: {
-            id: true,
-            title: true,
-            duration: true,
-            size: true,
-            createdAt: true,
-          }
-        }
+        recordings: true
       }
     });
 
@@ -136,14 +120,14 @@ router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Reque
     }
 
     // Calculate statistics
-    const uniqueParticipants = new Set(meeting.participants.map(p => p.userId)).size;
+    const uniqueParticipants = new Set(meeting.participations.map(p => p.userId)).size;
     const totalMessages = meeting.messages.length;
     const totalReactions = meeting.reactions.length;
-    const avgDuration = meeting.participants
+    const avgDuration = meeting.participations
       .filter(p => p.leftAt && p.joinedAt)
       .reduce((acc, p) => acc + (new Date(p.leftAt!).getTime() - new Date(p.joinedAt).getTime()), 0) / (uniqueParticipants || 1);
 
-    res.json({
+    return res.json({
       meeting: {
         id: meeting.id,
         name: meeting.name,
@@ -160,9 +144,9 @@ router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Reque
         avgDurationMs: Math.round(avgDuration),
         recordings: meeting.recordings.length,
       },
-      participants: meeting.participants.map(p => ({
+      participants: meeting.participations.map(p => ({
         id: p.id,
-        name: p.name,
+        name: p.guestName || p.user?.name,
         email: p.user?.email,
         joinedAt: p.joinedAt,
         leftAt: p.leftAt,
@@ -170,7 +154,7 @@ router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Reque
       })),
       recentMessages: meeting.messages.map(m => ({
         id: m.id,
-        sender: m.sender.name,
+        sender: m.sender?.name || 'Unknown',
         content: m.content,
         timestamp: m.createdAt,
       })),
@@ -188,15 +172,16 @@ router.get('/meetings/:meetingId', AuthMiddleware.requireAuth, async (req: Reque
     });
   } catch (error: any) {
     console.error('Error fetching meeting analytics:', error);
-    res.status(500).json({ error: 'Failed to fetch meeting analytics' });
+    return res.status(500).json({ error: 'Failed to fetch meeting analytics' });
   }
 });
 
 // ==================== GET USAGE ANALYTICS ====================
-router.get('/usage', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.get('/usage', AuthMiddleware.requireAuth as any, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user!;
   try {
     const { hostId } = req.query;
-    const userId = hostId as string || req.user!.id;
+    const userId = hostId as string || user.userId;
 
     // Get current month's usage
     const now = new Date();
@@ -213,7 +198,7 @@ router.get('/usage', AuthMiddleware.requireAuth, async (req: Request, res: Respo
           }
         }
       }),
-      prisma.participant.count({
+      prisma.participation.count({
         where: {
           meeting: {
             hostId: userId,
@@ -242,7 +227,7 @@ router.get('/usage', AuthMiddleware.requireAuth, async (req: Request, res: Respo
       _count: true
     });
 
-    res.json({
+    return res.json({
       period: {
         start: startOfMonth.toISOString(),
         end: endOfMonth.toISOString(),
@@ -258,15 +243,16 @@ router.get('/usage', AuthMiddleware.requireAuth, async (req: Request, res: Respo
     });
   } catch (error: any) {
     console.error('Error fetching usage analytics:', error);
-    res.status(500).json({ error: 'Failed to fetch usage analytics' });
+    return res.status(500).json({ error: 'Failed to fetch usage analytics' });
   }
 });
 
 // ==================== GET REVENUE ANALYTICS (ADMIN) ====================
-router.get('/revenue', AuthMiddleware.requireAuth, async (req: Request, res: Response) => {
+router.get('/revenue', AuthMiddleware.requireAuth as any, async (req: Request, res: Response) => {
+  const user = (req as AuthRequest).user;
   try {
     // Only for admin users
-    if (req.user!.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -288,7 +274,7 @@ router.get('/revenue', AuthMiddleware.requireAuth, async (req: Request, res: Res
       _sum: { size: true }
     });
 
-    res.json({
+    return res.json({
       users: {
         total: totalUsers,
       },
@@ -308,7 +294,7 @@ router.get('/revenue', AuthMiddleware.requireAuth, async (req: Request, res: Res
     });
   } catch (error: any) {
     console.error('Error fetching revenue analytics:', error);
-    res.status(500).json({ error: 'Failed to fetch revenue analytics' });
+    return res.status(500).json({ error: 'Failed to fetch revenue analytics' });
   }
 });
 

@@ -4,20 +4,23 @@ const prisma = new PrismaClient();
 
 export interface DataExportRequest {
   userId: string;
-  email: string;
-  requestedAt: Date;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  exportData?: any;
+  status: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED';
+  exportUrl?: string;
+  expiresAt?: Date;
+  createdAt: Date;
+  completedAt?: Date;
 }
 
 export interface ConsentRecord {
+  id: string;
   userId: string;
   consentType: string;
   granted: boolean;
-  grantedAt: Date;
-  withdrawnAt?: Date;
-  ipAddress?: string;
-  userAgent?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  withdrawnAt?: Date | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 /**
@@ -28,16 +31,14 @@ export class GDPRRepository {
   /**
    * Create data export request
    */
-  static async createExportRequest(userId: string, email: string): Promise<string> {
+  static async createExportRequest(userId: string): Promise<string> {
     const requestId = `export-${userId}-${Date.now()}`;
-    
+
     await prisma.dataExportRequest.create({
       data: {
         id: requestId,
         userId,
-        email,
-        status: 'pending',
-        requestedAt: new Date(),
+        status: 'PENDING',
       },
     });
 
@@ -60,9 +61,9 @@ export class GDPRRepository {
             recordings: true,
           },
         },
-        participants: {
+        participations: {
           include: {
-            room: true,
+            meeting: true,
           },
         },
         messages: { take: 1000 },
@@ -100,7 +101,7 @@ export class GDPRRepository {
     // Update status to processing
     await prisma.dataExportRequest.update({
       where: { id: requestId },
-      data: { status: 'processing' },
+      data: { status: 'PROCESSING' },
     });
 
     try {
@@ -112,8 +113,7 @@ export class GDPRRepository {
       await prisma.dataExportRequest.update({
         where: { id: requestId },
         data: {
-          status: 'completed',
-          exportData,
+          status: 'READY',
         },
       });
 
@@ -121,7 +121,7 @@ export class GDPRRepository {
     } catch (error) {
       await prisma.dataExportRequest.update({
         where: { id: requestId },
-        data: { status: 'failed' },
+        data: { status: 'FAILED' },
       });
       throw error;
     }
@@ -195,7 +195,6 @@ export class GDPRRepository {
         userId: data.userId,
         consentType: data.consentType,
         granted: data.granted,
-        grantedAt: new Date(),
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
       },
@@ -211,7 +210,7 @@ export class GDPRRepository {
         userId,
         withdrawnAt: null,
       },
-      orderBy: { grantedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -251,7 +250,7 @@ export class GDPRRepository {
   static async getConsentAuditLog(userId: string): Promise<ConsentRecord[]> {
     return prisma.consentRecord.findMany({
       where: { userId },
-      orderBy: { grantedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -332,7 +331,7 @@ export class GDPRRepository {
 
     // Delete old export requests
     await prisma.dataExportRequest.deleteMany({
-      where: { requestedAt: { lt: cutoffDate } },
+      where: { createdAt: { lt: cutoffDate } },
     });
 
     console.log(`Cleanup completed. Deleted data older than ${retentionDays} days.`);

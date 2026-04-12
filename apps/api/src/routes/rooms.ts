@@ -17,11 +17,11 @@ const roomCodeSchema = z.string()
   .max(50, 'Room code must be less than 50 characters')
   .regex(/^[a-zA-Z0-9\-]+$/, 'Room code must contain only letters, numbers, and hyphens');
 
-// Room ID validation - UUID format
-const roomIdSchema = z.string()
-  .min(1, 'Room ID is required')
-  .max(50, 'Room ID must be less than 50 characters')
-  .uuid('Invalid room ID format');
+// Room ID validation - reserved for future use
+// const roomIdSchema = z.string()
+//   .min(1, 'Room ID is required')
+//   .max(50, 'Room ID must be less than 50 characters')
+//   .uuid('Invalid room ID format');
 
 // Validation schemas
 const createRoomSchema = z.object({
@@ -65,12 +65,8 @@ router.get('/', AuthMiddleware.protect, async (req: AuthRequest, res: Response) 
       success: true,
       data: rooms,
     });
-  } catch (error: any) {
-    console.error('Error fetching rooms:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch rooms' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -78,7 +74,7 @@ router.get('/', AuthMiddleware.protect, async (req: AuthRequest, res: Response) 
  * GET /api/v1/rooms/active
  * Get active rooms
  */
-router.get('/active', async (req: Request, res: Response) => {
+router.get('/active', AuthMiddleware.optional, async (_req: AuthRequest, res: Response) => {
   try {
     const rooms = await RoomService.getActiveRooms();
 
@@ -86,12 +82,8 @@ router.get('/active', async (req: Request, res: Response) => {
       success: true,
       data: rooms,
     });
-  } catch (error: any) {
-    console.error('Error fetching active rooms:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch active rooms' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -132,23 +124,19 @@ router.post('/', AuthMiddleware.protect, async (req: AuthRequest, res: Response)
       return;
     }
 
-    console.error('Error creating room:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to create room' },
-    });
+    throw error;
   }
 });
 
 /**
  * GET /api/v1/rooms/:roomCode
  * Get room by code
- * 🔒 SECURITY FIX C-03: Validates room code to prevent SQL injection
+ * SECURITY FIX C-03: Validates room code to prevent SQL injection
  */
 router.get('/:roomCode', async (req: Request, res: Response) => {
   try {
-    // 🔒 SECURITY FIX: Validate room code format
-    const { roomCode } = roomCodeSchema.parse(req.params);
+    // SECURITY FIX: Validate room code format
+    const roomCode = roomCodeSchema.parse(req.params.roomCode);
 
     const room = await RoomService.getByCode(roomCode);
 
@@ -168,8 +156,8 @@ router.get('/:roomCode', async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       res.status(400).json({
         success: false,
-        error: { 
-          code: 'VALIDATION_ERROR', 
+        error: {
+          code: 'VALIDATION_ERROR',
           message: 'Invalid room code format',
           details: error.errors.map(e => ({ field: e.path.join('.'), message: e.message })),
         },
@@ -177,11 +165,7 @@ router.get('/:roomCode', async (req: Request, res: Response) => {
       return;
     }
 
-    console.error('Error fetching room:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch room' },
-    });
+    throw error;
   }
 });
 
@@ -214,7 +198,7 @@ router.post('/:roomCode/join', AuthMiddleware.optional, async (req: AuthRequest,
     }
 
     // Verify password if required
-    if ((room.settings as any).requirePassword && password) {
+    if (room.password && password) {
       const isValid = await RoomService.verifyPassword(room.id, password);
       if (!isValid) {
         res.status(403).json({
@@ -248,12 +232,8 @@ router.post('/:roomCode/join', AuthMiddleware.optional, async (req: AuthRequest,
         participant,
       },
     });
-  } catch (error: any) {
-    console.error('Error joining room:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to join room' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -289,12 +269,8 @@ router.post('/:roomId/start', AuthMiddleware.protect, async (req: AuthRequest, r
       success: true,
       data: updatedRoom,
     });
-  } catch (error: any) {
-    console.error('Error starting room:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to start room' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -330,12 +306,8 @@ router.post('/:roomId/end', AuthMiddleware.protect, async (req: AuthRequest, res
       success: true,
       data: updatedRoom,
     });
-  } catch (error: any) {
-    console.error('Error ending room:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to end room' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -371,12 +343,8 @@ router.patch('/:roomId/settings', AuthMiddleware.protect, async (req: AuthReques
       success: true,
       data: updatedRoom,
     });
-  } catch (error: any) {
-    console.error('Error updating room settings:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to update settings' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -412,12 +380,8 @@ router.post('/:roomId/participants/:participantId/promote', AuthMiddleware.prote
       success: true,
       data: participant,
     });
-  } catch (error: any) {
-    console.error('Error promoting participant:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to promote participant' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 
@@ -453,12 +417,8 @@ router.delete('/:roomId/participants/:participantId', AuthMiddleware.protect, as
       success: true,
       data: { message: 'Participant removed' },
     });
-  } catch (error: any) {
-    console.error('Error removing participant:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to remove participant' },
-    });
+  } catch (error) {
+    throw error;
   }
 });
 

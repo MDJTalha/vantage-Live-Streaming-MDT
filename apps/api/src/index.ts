@@ -1,10 +1,14 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import csurf from 'csurf';
 import { config } from '@vantage/config';
-import { io } from './socket';
+import { initializeSocket, io } from './socket';
+import prisma from './db';
 import authRoutes from './routes/auth';
 import oauthRoutes from './routes/oauth';
 import roomRoutes from './routes/rooms';
@@ -16,7 +20,7 @@ import meetingRoutes from './routes/meetings';
 import recordingRoutes from './routes/recordings';
 import analyticsRoutes from './routes/analytics';
 import aiRoutes from './routes/ai';
-import AuthMiddleware from './middleware/auth';
+import podcastRoutes from './routes/podcasts';
 import RateLimiter from './middleware/rateLimiter';
 import DatabaseService from './db/service';
 import requestIdMiddleware from './middleware/requestId';
@@ -24,6 +28,7 @@ import { errorHandler } from './utils/errors';
 import { MetricsService } from './services/MetricsService';
 import { AuthService } from './services/AuthService';
 import { logger, httpLogger } from './utils/logger';
+import { getIsShuttingDown, setShuttingDown } from './utils/shutdown';
 
 const app: Express = express();
 const PORT = config.api.port || 4000;
@@ -104,6 +109,7 @@ const csrfProtection = csurf({
 });
 
 // Apply CSRF to state-changing routes
+app.use('/api/v1/auth', csrfProtection);
 app.use('/api/v1/rooms', csrfProtection);
 app.use('/api/v1/chat', csrfProtection);
 app.use('/api/v1/engagement', csrfProtection);
@@ -219,6 +225,9 @@ app.use('/api/v1/analytics', analyticsRoutes);
 // AI routes (NEW - Phase 8: AI Integration)
 app.use('/api/v1/ai', aiRoutes);
 
+// Podcast routes
+app.use('/api/v1/podcasts', podcastRoutes);
+
 // Chat routes
 app.use('/api/v1/chat', chatRoutes);
 
@@ -282,32 +291,53 @@ const server = app.listen(PORT, () => {
 // ============================================
 // Graceful Shutdown
 // ============================================
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+async function gracefulShutdown(signal: string) {
+  if (getIsShuttingDown()) return;
+  setShuttingDown(true);
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+  console.log(`\n🛑 ${signal} received — starting graceful shutdown...`);
+
+  // Step 1: Stop accepting new connections (return 503 for health check)
+  console.log('  1. Stopping HTTP server...');
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+    // Force close after 10s
+    setTimeout(() => {
+      console.warn('  ⚠️  Forcing server close after 10s');
+      resolve();
+    }, 10000);
   });
-});
+
+  // Step 2: Disconnect Socket.IO
+  console.log('  2. Disconnecting WebSocket clients...');
+  if (io) {
+    await new Promise<void>((resolve) => {
+      io?.close(() => resolve());
+      setTimeout(resolve, 5000);
+    });
+  }
+
+  // Step 3: Disconnect Prisma
+  console.log('  3. Closing database connections...');
+  await prisma.$disconnect().catch(console.error);
+
+  // Step 4: Disconnect Redis
+  console.log('  4. Closing Redis connections...');
+  // Note: RateLimiter uses a global Redis instance — disconnect it
+  // (if you have a reference to it, disconnect here)
+
+  console.log('✅ Graceful shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ============================================
 // WebSocket Integration
 // ============================================
-io.attach(server, {
-  cors: {
-    origin: config.frontend.url || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-});
+initializeSocket(server);
+console.log('✓ WebSocket server initialized');
 
 export default app;
 export { server };

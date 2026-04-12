@@ -9,14 +9,14 @@ const router = Router();
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     const uploadDir = path.join(process.cwd(), 'uploads', 'recordings');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
     cb(null, uploadDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, `recording-${uniqueSuffix}${path.extname(file.originalname)}`);
   }
@@ -33,7 +33,7 @@ router.get('/', AuthMiddleware.requireAuth, async (req: Request, res: Response) 
     const { meetingId } = req.query;
     
     const recordings = await prisma.recording.findMany({
-      where: meetingId ? { meetingId: meetingId as string } : { userId: req.user!.id },
+      where: meetingId ? { meetingId: meetingId as string } : { userId: req.user!.userId },
       include: {
         meeting: {
           select: {
@@ -73,10 +73,10 @@ router.get('/', AuthMiddleware.requireAuth, async (req: Request, res: Response) 
       processedAt: rec.processedAt,
     }));
 
-    res.json({ recordings: recordingList });
+    return res.json({ recordings: recordingList });
   } catch (error: any) {
     console.error('Error fetching recordings:', error);
-    res.status(500).json({ error: 'Failed to fetch recordings' });
+    return res.status(500).json({ error: 'Failed to fetch recordings' });
   }
 });
 
@@ -109,7 +109,7 @@ router.get('/:id', AuthMiddleware.requireAuth, async (req: Request, res: Respons
     }
 
     // Check permissions
-    if (recording.userId !== req.user!.id && recording.meeting?.hostId !== req.user!.id) {
+    if (recording.userId !== req.user!.userId && recording.meeting?.hostId !== req.user!.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -119,7 +119,7 @@ router.get('/:id', AuthMiddleware.requireAuth, async (req: Request, res: Respons
       data: { viewCount: recording.viewCount + 1 }
     });
 
-    res.json({
+    return res.json({
       id: recording.id,
       meetingId: recording.meetingId,
       meetingName: recording.meeting?.name || 'Unknown Meeting',
@@ -142,7 +142,7 @@ router.get('/:id', AuthMiddleware.requireAuth, async (req: Request, res: Respons
     });
   } catch (error: any) {
     console.error('Error fetching recording:', error);
-    res.status(500).json({ error: 'Failed to fetch recording' });
+    return res.status(500).json({ error: 'Failed to fetch recording' });
   }
 });
 
@@ -166,7 +166,7 @@ router.post('/upload', AuthMiddleware.requireAuth, upload.single('file'), async 
     const recording = await prisma.recording.create({
       data: {
         meetingId,
-        userId: req.user!.id,
+        userId: req.user!.userId,
         title: title || `Recording ${new Date().toLocaleString()}`,
         description: description || null,
         url: `/uploads/recordings/${req.file.filename}`,
@@ -179,7 +179,7 @@ router.post('/upload', AuthMiddleware.requireAuth, upload.single('file'), async 
       }
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       id: recording.id,
       title: recording.title,
       url: recording.url,
@@ -188,7 +188,7 @@ router.post('/upload', AuthMiddleware.requireAuth, upload.single('file'), async 
     });
   } catch (error: any) {
     console.error('Error uploading recording:', error);
-    res.status(500).json({ error: 'Failed to upload recording' });
+    return res.status(500).json({ error: 'Failed to upload recording' });
   }
 });
 
@@ -213,7 +213,7 @@ router.delete('/:id', AuthMiddleware.requireAuth, async (req: Request, res: Resp
     }
 
     // Check permissions (owner or meeting host)
-    if (recording.userId !== req.user!.id && recording.meeting?.hostId !== req.user!.id) {
+    if (recording.userId !== req.user!.userId && recording.meeting?.hostId !== req.user!.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -229,10 +229,10 @@ router.delete('/:id', AuthMiddleware.requireAuth, async (req: Request, res: Resp
       data: { status: 'DELETED' }
     });
 
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error: any) {
     console.error('Error deleting recording:', error);
-    res.status(500).json({ error: 'Failed to delete recording' });
+    return res.status(500).json({ error: 'Failed to delete recording' });
   }
 });
 
@@ -255,13 +255,13 @@ router.get('/:id/download', AuthMiddleware.requireAuth, async (req: Request, res
       data: { downloadCount: recording.downloadCount + 1 }
     });
 
-    res.json({
+    return res.json({
       url: recording.url,
       filename: `${recording.title}.${recording.format}`,
     });
   } catch (error: any) {
     console.error('Error getting download URL:', error);
-    res.status(500).json({ error: 'Failed to get download URL' });
+    return res.status(500).json({ error: 'Failed to get download URL' });
   }
 });
 
