@@ -17,7 +17,7 @@
     "socket.io": "^4.7.0",
     "jsonwebtoken": "^9.0.0",
     "ioredis": "^5.3.0",
-    "uuid": "^9.0.0",
+    "uuid": "^14.0.0",
     "@vantage/types": "*",
     "@vantage/utils": "*",
     "@vantage/config": "*"
